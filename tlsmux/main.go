@@ -36,7 +36,11 @@ func main() {
 	sshTarget := flag.String("ssh-target", "127.0.0.1:143", "raw SSH target")
 	http1Target := flag.String("http1-target", "127.0.0.1:9081", "HTTP/1.1 target")
 	h2Target := flag.String("h2-target", "127.0.0.1:9080", "HTTP/2 target")
+	sniffTimeout := flag.Duration("sniff-timeout", 250*time.Millisecond, "wait for initial application bytes before offering an SSH banner")
 	flag.Parse()
+	if *sniffTimeout <= 0 {
+		log.Fatal("sniff-timeout must be positive")
+	}
 
 	cert, err := tls.LoadX509KeyPair(*certPath, *keyPath)
 	if err != nil {
@@ -69,7 +73,7 @@ func main() {
 				target = *h2Target
 			} else {
 				var err error
-				target, reader, err = classify(c, *sshTarget, *http1Target, 2*time.Second)
+				target, reader, err = classify(c, *sshTarget, *http1Target, *sniffTimeout)
 				if err != nil {
 					log.Printf("classify TLS stream: %v", err)
 					return

@@ -38,3 +38,26 @@ echo 'The managed policy uses only complement ranges for UDP Custom:'
 echo '1-52, 54-442, 444-1193, 1195-3999, 4001-5299, 5300-5999, 50001-65535.'
 echo 'Dedicated direct listeners must have an earlier nat ACCEPT exception so a legacy catch-all DNAT cannot capture them.'
 echo 'This audit does not alter OpenVPN, Hysteria 1, Hysteria 2, or any firewall rule.'
+
+port="${1:-5300}"
+[[ "$port" =~ ^[1-9][0-9]{0,4}$ ]] && ((port <= 65535)) || { echo 'public port must be 1-65535' >&2; exit 1; }
+echo
+printf '[selected public UDP port: %s]\n' "$port"
+if ((port == 53)); then echo 'This port belongs to SlowDNS.'
+elif ((port == 443)); then echo 'This port belongs to Hysteria 2.'
+elif ((port == 1194)); then echo 'This port belongs to OpenVPN.'
+elif ((port == 4000)); then echo 'This port belongs to WireGuard.'
+elif ((port >= 6000 && port <= 19999)); then echo 'This port belongs to ZiVPN.'
+elif ((port >= 20000 && port <= 50000)); then echo 'This port belongs to Hysteria 1.'
+else echo 'This port should route to UDP Custom backend 36717.'
+fi
+printf 'For a UDP Custom test use the VPS IPv4 address, public UDP 5300, and a valid SSH account.\n'
+echo
+for unit in frimps-udp-custom frimps-badvpn frimps-v6-udp-routing; do
+  printf '%s: ' "$unit"
+  systemctl is-active "$unit" || true
+done
+if command -v jq >/dev/null && [[ -r /etc/frimps-udp-custom/config.json ]]; then
+  jq '{listen, authMode: .auth.mode}' /etc/frimps-udp-custom/config.json
+fi
+journalctl -u frimps-udp-custom -u frimps-badvpn --no-pager -n 30 || true

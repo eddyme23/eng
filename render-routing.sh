@@ -28,8 +28,6 @@ defaults
 
 frontend public_tcp_443
     bind :443
-    tcp-request inspect-delay 5s
-    tcp-request content accept if { req.ssl_hello_type 1 }
     default_backend main_tls_router
 
 frontend public_plain_tcp
@@ -38,6 +36,10 @@ frontend public_plain_tcp
     bind :8880
     tcp-request inspect-delay 2s
     acl openvpn_ws req.payload(0,0) -m reg ^GET[[:space:]]+/openvpn[[:space:]]
+    # Dispatch as soon as the request line is complete; retain the inspect
+    # window only for fragmented or unusual raw payloads.
+    acl request_line req.payload(0,0) -m reg ^[A-Z]+[[:space:]]+[^[:space:]]+[[:space:]]+HTTP/[0-9.]+
+    tcp-request content accept if request_line
     tcp-request content accept if openvpn_ws
     tcp-request content accept if { req.len gt 32768 }
     use_backend openvpn_websocket if openvpn_ws

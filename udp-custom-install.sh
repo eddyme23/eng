@@ -15,7 +15,11 @@ install -d -m 700 /etc/frimps-udp-custom
 curl -fL --retry 3 -o /etc/frimps-udp-custom/udp-custom 'https://raw.githubusercontent.com/mahpud896/UDP-Custom/d7bb82abb6b36f1320bc349f36c0746b335a9ff9/bin/udp-custom-linux-amd64'
 chmod 700 /etc/frimps-udp-custom/udp-custom
 curl -fL --retry 3 -o /etc/frimps-udp-custom/config.json 'https://raw.githubusercontent.com/mahpud896/UDP-Custom/d7bb82abb6b36f1320bc349f36c0746b335a9ff9/config/config.json'
-sed -i 's/":36712"/":36717"/' /etc/frimps-udp-custom/config.json
+command -v jq >/dev/null || { echo 'install jq' >&2; exit 1; }
+config_tmp="$(mktemp /etc/frimps-udp-custom/.config.XXXXXX)"
+jq '.listen = ":36717"' /etc/frimps-udp-custom/config.json > "$config_tmp"
+chmod 600 "$config_tmp"
+mv "$config_tmp" /etc/frimps-udp-custom/config.json
 cat >/etc/systemd/system/frimps-badvpn.service <<'EOF'
 [Unit]
 Description=frimps BadVPN UDP gateway
@@ -38,6 +42,7 @@ Description=frimps UDP Custom backend
 After=network-online.target frimps-v6-udp-routing.service frimps-badvpn.service
 Requires=frimps-v6-udp-routing.service
 [Service]
+WorkingDirectory=/etc/frimps-udp-custom
 ExecStart=/etc/frimps-udp-custom/udp-custom server -c /etc/frimps-udp-custom/config.json
 Restart=always
 RestartSec=2
@@ -49,3 +54,4 @@ WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
 echo 'UDP Custom backend configured on UDP 36717; Frimps routes only non-reserved UDP ports to it.'
+printf 'Test UDP Custom on public UDP 5300 using the VPS IPv4 address and a managed SSH account.\n'
