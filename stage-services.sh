@@ -17,6 +17,7 @@ for bin in haproxy nginx go dropbear dropbearkey node; do command -v "$bin" >/de
 "$script_dir/build-payloadgate.sh"
 "$script_dir/build-sshws.sh"
 haproxy -c -f "$state_dir/haproxy-443.cfg"
+bash "$script_dir/validate-v6.sh"
 
 install -d -m 700 "$install_dir"
 install -d -m 755 "$runtime_dir" "$runtime_dir/tlsmux" "$runtime_dir/payloadgate" "$runtime_dir/sshws" "$runtime_dir/gfraw"

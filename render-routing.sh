@@ -37,7 +37,7 @@ frontend public_plain_tcp
     bind :8080
     bind :8880
     tcp-request inspect-delay 2s
-    acl openvpn_ws req.payload(0,0) -m reg ^GET[[:space:]]+/openvpn[[:space:]?]
+    acl openvpn_ws req.payload(0,0) -m reg ^GET[[:space:]]+/openvpn[[:space:]]
     tcp-request content accept if openvpn_ws
     tcp-request content accept if { req.len gt 32768 }
     use_backend openvpn_websocket if openvpn_ws
@@ -53,13 +53,10 @@ frontend public_ssh_only_tcp
     bind :2082
     bind :2086
     mode tcp
-    default_backend ssh_payload_gateway
+    default_backend ssh_http_gateway
 
 backend main_tls_router
     server main_tls_router 127.0.0.1:9443
-
-backend ssh_payload_gateway
-    server ssh_payload_gateway 127.0.0.1:3104
 
 EOF
 
@@ -69,7 +66,21 @@ server {
     listen 127.0.0.1:9080 http2;
     server_name $domain;
 
+    location = /openvpn {
+        proxy_pass http://127.0.0.1:10081;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_buffering off;
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+    }
+
     location = / {
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+        proxy_buffering off;
         proxy_pass http://127.0.0.1:3102;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
@@ -85,7 +96,18 @@ server {
     listen 127.0.0.1:9081;
     server_name $domain;
 
-    location = / { proxy_pass http://127.0.0.1:3102; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; proxy_set_header Host \$host; }
+    location = /openvpn {
+        proxy_pass http://127.0.0.1:10081;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_buffering off;
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+    }
+
+    location = / { proxy_read_timeout 1h; proxy_send_timeout 1h; proxy_buffering off; proxy_pass http://127.0.0.1:3102; proxy_http_version 1.1; proxy_set_header Upgrade \$http_upgrade; proxy_set_header Connection "upgrade"; proxy_set_header Host \$host; }
 }
 EOF
 

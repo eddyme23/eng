@@ -14,6 +14,7 @@ for port in 80 443 8080 8880 2082 2086; do check grep -q "bind :$port$" "$state_
 check grep -q 'use_backend openvpn_websocket if openvpn_ws' "$state_dir/haproxy-443.cfg"
 check grep -q 'default_backend ssh_http_gateway' "$state_dir/haproxy-443.cfg"
 check grep -q 'server openvpn_websocket 127.0.0.1:10081' "$state_dir/haproxy-443.cfg"
+check grep -q 'location = /openvpn' "$state_dir/nginx-main-tls.conf"
 check grep -q 'location = /' "$state_dir/nginx-main-tls.conf"
 check grep -q -- '-ssh-target 127.0.0.1:143' "$state_dir/tlsmux.service"
 check grep -q -- '-ws-target 127.0.0.1:3103' "$state_dir/payloadgate.service"

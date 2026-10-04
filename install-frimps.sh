@@ -4,8 +4,8 @@
 # then enables all Frimps-managed services for boot.
 set -euo pipefail
 
-repo_url='https://github.com/eddyme23/frimps.git'
-repo_dir=/root/frimps
+repo_url='https://github.com/eddyme23/eng.git'
+repo_dir=/root/eng
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 state_dir=/etc/frimps-v6
 
@@ -38,6 +38,7 @@ if [[ ! -f "$script_dir/install-v6.sh" ]]; then
   apt-get update
   DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl git
   if [[ -d "$repo_dir/.git" ]]; then
+    [[ "$(git -C "$repo_dir" remote get-url origin)" == "$repo_url" ]] || die "repository origin does not match $repo_url"
     git -C "$repo_dir" pull --ff-only origin main
   elif [[ -e "$repo_dir" ]]; then
     die "$repo_dir exists but is not a Frimps Git repository"

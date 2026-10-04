@@ -9,6 +9,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 )
 
 func proxy(client net.Conn, reader io.Reader, target string) {
@@ -38,23 +39,62 @@ func main() {
 	flag.Parse()
 
 	cert, err := tls.LoadX509KeyPair(*certPath, *keyPath)
-	if err != nil { log.Fatal(err) }
+	if err != nil {
+		log.Fatal(err)
+	}
 	listener, err := tls.Listen("tcp", *listen, &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12, NextProtos: []string{"h2", "http/1.1"}})
-	if err != nil { log.Fatal(err) }
+	if err != nil {
+		log.Fatal(err)
+	}
 	log.Printf("tlsmux listening on %s", *listen)
 
 	for {
 		conn, err := listener.Accept()
-		if err != nil { log.Printf("accept: %v", err); continue }
+		if err != nil {
+			log.Printf("accept: %v", err)
+			continue
+		}
 		go func(c net.Conn) {
 			defer func() { _ = c.Close() }()
+			tlsConn := c.(*tls.Conn)
+			_ = c.SetDeadline(time.Now().Add(15 * time.Second))
+			if err := tlsConn.Handshake(); err != nil {
+				log.Printf("TLS handshake: %v", err)
+				return
+			}
+			_ = c.SetDeadline(time.Time{})
 			reader := bufio.NewReader(c)
-			prefix, err := reader.Peek(4)
-			if err != nil { log.Printf("read initial stream: %v", err); return }
 			target := *http1Target
-			if tlsConn, ok := c.(*tls.Conn); ok && tlsConn.ConnectionState().NegotiatedProtocol == "h2" { target = *h2Target }
-			if strings.HasPrefix(string(prefix), "SSH-") { target = *sshTarget }
+			if tlsConn.ConnectionState().NegotiatedProtocol == "h2" {
+				target = *h2Target
+			} else {
+				var err error
+				target, reader, err = classify(c, *sshTarget, *http1Target, 2*time.Second)
+				if err != nil {
+					log.Printf("classify TLS stream: %v", err)
+					return
+				}
+			}
 			proxy(c, reader, target)
 		}(conn)
 	}
+}
+
+// An SSH client may wait for the server banner after the TLS handshake.
+// Only an idle stream falls back to SSH; incomplete HTTP is never reclassified.
+func classify(c net.Conn, sshTarget, httpTarget string, timeout time.Duration) (string, *bufio.Reader, error) {
+	reader := bufio.NewReader(c)
+	_ = c.SetReadDeadline(time.Now().Add(timeout))
+	prefix, err := reader.Peek(4)
+	_ = c.SetReadDeadline(time.Time{})
+	if err != nil {
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() && reader.Buffered() == 0 {
+			return sshTarget, bufio.NewReader(c), nil
+		}
+		return "", reader, err
+	}
+	if strings.HasPrefix(string(prefix), "SSH-") {
+		return sshTarget, reader, nil
+	}
+	return httpTarget, reader, nil
 }
