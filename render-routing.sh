@@ -37,11 +37,6 @@ frontend public_plain_tcp
     default_backend ssh_http_gateway
 
 backend ssh_http_gateway
-
-backend openvpn_websocket
-    server openvpn_websocket 127.0.0.1:10081
-
-backend ssh_http_gateway
     server ssh_http_gateway 127.0.0.1:3102
 
 frontend public_ssh_only_tcp

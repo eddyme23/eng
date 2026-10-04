@@ -12,6 +12,8 @@ check jq -e '.udpCustomRanges == ["1-52", "54-442", "444-1193", "1195-3999", "40
 check jq -e 'any(.publicRoutes[]; .path == "/openvpn" and .backend == "openvpn-websocket:10081")' "$state_dir/backends.json"
 for port in 80 443 8080 8880 2082 2086; do check grep -q "bind :$port$" "$state_dir/haproxy-443.cfg"; done
 check grep -q -- '-openvpn-target 127.0.0.1:10081' "$state_dir/payloadgate.service"
+check awk '/^(frontend|backend|listen) / {key=$1 ":" $2; if (seen[key]++) {print "duplicate section: " key; bad=1}} END {exit bad}' "$state_dir/haproxy-443.cfg"
+if command -v haproxy >/dev/null 2>&1; then check haproxy -c -f "$state_dir/haproxy-443.cfg"; fi
 check grep -q 'default_backend ssh_http_gateway' "$state_dir/haproxy-443.cfg"
 
 check grep -q 'location = /openvpn' "$state_dir/nginx-main-tls.conf"
