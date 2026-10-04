@@ -54,7 +54,7 @@ source /etc/os-release
 [[ "${ID:-}" == debian && "${VERSION_ID:-}" == 12 ]] || die 'this installer currently supports Debian 12 only'
 
 note 'Frimps fresh-server setup'
-printf 'Cloudflare DNS validation is used so the default certificate includes a wildcard name.\n\n'
+printf 'Cloudflare DNS validation is used to issue a certificate for the primary domain.\n\n'
 # A retry after an interrupted fresh installation must preserve generated UDP
 # credentials when the corresponding prompt is left blank.
 if [[ -r "$state_dir/service-options.env" ]]; then
@@ -65,7 +65,6 @@ previous_zivpn_password="${V6_ZIVPN_PASSWORD:-}"
 previous_hy2_password="${V6_HYSTERIA2_OBFS:-}"
 domain="$(ask 'Primary domain' '')"
 valid_host "$domain" || die 'primary domain is invalid'
-cert_names="$(ask 'Certificate names (comma-separated)' "$domain,*.$domain")"
 email="$(ask "Let's Encrypt email" '')"
 [[ "$email" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]] || die 'email is invalid'
 
@@ -148,24 +147,17 @@ EOF
   fi
 fi
 
-note "Obtaining the wildcard TLS certificate from Let's Encrypt"
+note "Obtaining the primary-domain TLS certificate from Let's Encrypt"
 systemctl stop nginx haproxy 2>/dev/null || true
 install -d -m 700 /etc/letsencrypt
 cf_credentials=/etc/letsencrypt/cloudflare.ini
 umask 077
 printf 'dns_cloudflare_api_token = %s\n' "$cf_token" > "$cf_credentials"
 unset cf_token
-cert_args=()
-IFS=',' read -r -a names <<<"$cert_names"
-for name in "${names[@]}"; do
-  name="${name//[[:space:]]/}"
-  if [[ "$name" != "*.$domain" ]]; then valid_host "$name" || die "invalid certificate name: $name"; fi
-  cert_args+=(-d "$name")
-done
-[[ ${#cert_args[@]} -gt 0 ]] || die 'at least one certificate name is required'
 certbot certonly --non-interactive --agree-tos --email "$email" \
   --dns-cloudflare --dns-cloudflare-credentials "$cf_credentials" \
-  --dns-cloudflare-propagation-seconds 60 --cert-name "$domain" "${cert_args[@]}"
+  --dns-cloudflare-propagation-seconds 60 --cert-name "$domain" \
+  --renew-with-new-domains -d "$domain"
 cert_file="/etc/letsencrypt/live/$domain/fullchain.pem"
 key_file="/etc/letsencrypt/live/$domain/privkey.pem"
 [[ -s "$cert_file" && -s "$key_file" ]] || die 'certificate issuance did not produce expected files'

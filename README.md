@@ -1,6 +1,6 @@
 # Frimps / ENG Multi Script
 
-Debian 12; run as root.
+Debian 12; run as root. The installer requests a TLS certificate for the primary domain only, using Cloudflare DNS validation.
 
 Install from this repository:
 
