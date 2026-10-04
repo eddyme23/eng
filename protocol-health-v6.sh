@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+state_dir="${V6_STATE_DIR:-/etc/frimps-v6}"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+mode="${1:---staged}"
+
+ok=0
+bad=0
+pass() { printf '[OK] %s\n' "$1"; ok=$((ok + 1)); }
+fail() { printf '[FAIL] %s\n' "$1"; bad=$((bad + 1)); }
+check_cmd() { if "$@" >/dev/null 2>&1; then pass "$*"; else fail "$*"; fi; }
+check_listener() {
+  if ss -ltn "( sport = :$1 )" | tail -n +2 | grep -q .; then pass "TCP $1 is listening"; else fail "TCP $1 is listening"; fi
+}
+
+[[ "${EUID}" -eq 0 ]] || { echo 'Run as root.' >&2; exit 1; }
+case "$mode" in --staged|--live) ;; *) echo 'Use --staged or --live.' >&2; exit 1 ;; esac
+
+if "$script_dir/validate-v6.sh" >/dev/null 2>&1; then pass 'v6 generated-state validation'; else fail 'v6 generated-state validation'; fi
+for file in backends.json haproxy-443.cfg nginx-main-tls.conf nginx-plain.conf nginx-ssh-only.conf tlsmux.service payloadgate.service; do
+  [[ -s "$state_dir/$file" ]] && pass "$file exists" || fail "$file exists"
+done
+
+if [[ "$mode" == '--live' ]]; then
+  domain="$(jq -r '.primaryDomain' "$state_dir/routes.json")"
+  for unit in nginx haproxy frimps-v6-dropbear frimps-v6-sshws frimps-v6-tlsmux frimps-v6-payloadgate frimps-v6-gfraw; do
+    check_cmd systemctl is-active --quiet "$unit"
+  done
+  for port in 443 80 8080 8880 2082 2086; do
+    check_listener "$port"
+  done
+  check_cmd openssl s_client -connect "127.0.0.1:443" -servername "$domain" -brief
+
+fi
+
+printf '\nResult: %s passed, %s failed\n' "$ok" "$bad"
+[[ "$bad" -eq 0 ]]
