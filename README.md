@@ -4,7 +4,7 @@ logged in as `root`
 
 #### Installation
 ```
-bash <(curl -fsSL https://raw.githubusercontent.com/eddyme23/frimps/main/install-frimps.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/eddyme23/eng/main/install-frimps.sh)
 ```
        
 ----
