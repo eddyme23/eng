@@ -1,11 +1,10 @@
 # Multi Script
-Recommended OS : **Debian 12** , logged in as `root`.
 
 #### Installation
 ```
 bash <(curl -fsSL https://raw.githubusercontent.com/eddyme23/frimps/main/install-frimps.sh)
 ```
-           
+logged in as `root`.        
 ----
   
 ### Os Supported
