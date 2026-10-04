@@ -45,3 +45,6 @@ Run `bash ./postflight-v6.sh` and `bash ./protocol-health-v6.sh --live` after in
 git pull --ff-only origin main
 bash ./apply-connection-fixes.sh
 ```
+
+Hysteria 1 account creation accepts an authentication password or generates a random password when left blank. Use that password with the existing server obfs shown in the account details. Deprecated Hysteria 1 import links are not generated; account menu option 5 edits speeds.
+

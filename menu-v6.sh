@@ -140,8 +140,7 @@ hysteria1_menu() {
     item 2 'Renew Hysteria 1 account'
     item 3 'Delete Hysteria 1 account'
     item 4 'List Hysteria 1 accounts'
-    item 5 'Show Hysteria 1 account link'
-    item 6 'Edit Hysteria 1 speeds'
+    item 5 'Edit Hysteria 1 speeds'
     back_item
     read -r -p '  ► Option: ' x
     case "$x" in
@@ -149,8 +148,7 @@ hysteria1_menu() {
       2) ask_account; bash "$script_dir/hysteria1-accounts.sh" renew "$account" "$validity"; pause ;;
       3) read -r -p 'Username: ' account; bash "$script_dir/hysteria1-accounts.sh" delete "$account"; pause ;;
       4) bash "$script_dir/hysteria1-accounts.sh" list; pause ;;
-      6) read -r -p 'Upload Mbps: ' up; read -r -p 'Download Mbps: ' down; bash "$script_dir/hysteria1-accounts.sh" speed "$up" "$down"; pause ;;
-      5) pick_account_store "$state_dir/hysteria1-users.json" name "Hysteria 1" && bash "$script_dir/hysteria1-accounts.sh" uri "$account"; pause ;;
+      5) read -r -p 'Upload Mbps: ' up; read -r -p 'Download Mbps: ' down; bash "$script_dir/hysteria1-accounts.sh" speed "$up" "$down"; pause ;;
       0) return ;;
       *) echo 'Invalid option.'; sleep 1 ;;
     esac
