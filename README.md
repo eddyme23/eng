@@ -35,7 +35,7 @@ bash ./install-frimps.sh
 
 HAProxy owns the shared public TCP ports. Nginx uses loopback 9080/9081; Dropbear uses loopback 143. TCP and UDP 443 are separate listeners.
 
-GF HTTP payload clients retain the raw SSH upgrade gateway. Standard SSH WebSocket clients use the framing bridge. BShield uses an HTTP 101 upgrade followed by raw OpenVPN bytes, not RFC 6455 frames. Direct SSH SSL clients that wait for a server banner fall back to SSH after two seconds of inactivity following the TLS handshake.
+GF HTTP payload handling is built directly into payloadgate; no separate Node gateway or port 3104 is needed. Standard SSH WebSocket clients use the framing bridge. BShield uses an HTTP 101 upgrade followed by raw OpenVPN bytes, not RFC 6455 frames. Direct SSH SSL clients that wait for a server banner fall back to SSH after two seconds of inactivity following the TLS handshake.
 
 Menu: `frimps-v6-menu` or `menu`. State: `/etc/frimps-v6`.
 

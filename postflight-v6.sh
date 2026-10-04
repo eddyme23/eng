@@ -25,7 +25,7 @@ config_check() {
 
 for unit in \
   frimps-v6-dropbear frimps-v6-sshws \
-  frimps-v6-payloadgate frimps-v6-tlsmux frimps-v6-gfraw \
+  frimps-v6-payloadgate frimps-v6-tlsmux \
   frimps-v6-udp-routing \
   frimps-v6-wireguard-nat frimps-openvpn-nat \
   frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway \

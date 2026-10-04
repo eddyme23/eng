@@ -141,7 +141,7 @@ Description=Frimps v6 SSH payload gateway
 After=network.target
 
 [Service]
-ExecStart=/usr/local/libexec/frimps-v6-payloadgate -listen 127.0.0.1:3102 -ssh-target 127.0.0.1:143 -ws-target 127.0.0.1:3103 -legacy-target 127.0.0.1:3104
+ExecStart=/usr/local/libexec/frimps-v6-payloadgate -listen 127.0.0.1:3102 -ssh-target 127.0.0.1:143 -ws-target 127.0.0.1:3103
 Restart=on-failure
 NoNewPrivileges=true
 PrivateTmp=true

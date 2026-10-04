@@ -17,11 +17,11 @@ monitor() {
 }
 restart() {
   case "${1:-}" in
-    ssh) units='nginx haproxy frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-v6-gfraw' ;;
+    ssh) units='nginx haproxy frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux' ;;
     udp) units='frimps-v6-udp-routing frimps-slowdns hysteria1-server hysteria2-server zivpn frimps-badvpn frimps-udp-custom' ;;
     openvpn) units='frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield' ;;
     wireguard) units='frimps-v6-wireguard-nat wg-quick@wg0' ;;
-    all) units='frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-v6-gfraw frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-slowdns hysteria1-server hysteria2-server zivpn frimps-badvpn frimps-udp-custom frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield wg-quick@wg0 nginx haproxy' ;;
+    all) units='frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-slowdns hysteria1-server hysteria2-server zivpn frimps-badvpn frimps-udp-custom frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield wg-quick@wg0 nginx haproxy' ;;
     *) die 'usage: maintenance-v6.sh restart {ssh|udp|openvpn|wireguard|all}' ;;
   esac
   for unit in $units; do

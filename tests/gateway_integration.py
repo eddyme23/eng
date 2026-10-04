@@ -1,6 +1,6 @@
 """Local TCP checks for GF payloads and SSH WebSocket frame forwarding.
-Usage: python tests/gateway_integration.py --gf gfraw/proxy.js --sshws PATH --payloadgate PATH
-Requires node on PATH and prebuilt Go gateway executables. Uses ephemeral ports.
+Usage: python tests/gateway_integration.py --sshws PATH --payloadgate PATH
+Requires prebuilt Go gateway executables. Uses ephemeral ports.
 """
 import argparse, base64, hashlib, socket, subprocess, threading, time
 
@@ -39,9 +39,14 @@ def read_exact(c, n):
         d = c.recv(n-len(b)); assert d; b += d
     return b
 
-def legacy(port, method):
+def legacy(port, method, chained=False, fragmented=False):
     with socket.create_connection(('127.0.0.1', port), 3) as c:
-        c.sendall(method+b' / HTTP/1.1\r\nHost: example.com\r\n\r\n')
+        header = method+b' / HTTP/1.1\r\nHost: example.com\r\n\r\n'
+        if fragmented:
+            for fragment in [header[:5], header[5:17], header[17:]]:
+                c.sendall(fragment); time.sleep(.02)
+        else: c.sendall(header)
+        if chained: c.sendall(b'PATCH / HTTP/1.1\r\nHost: example.com\r\n\r\n')
         response = read_until(c, b'\r\n\r\n')
         assert response.startswith(b'HTTP/1.1 '+(b'200' if method==b'CONNECT' else b'101'))
         # Client waits for the server banner before sending SSH identification.
@@ -66,21 +71,25 @@ def websocket(port):
         assert frame() == payload
 
 def main():
-    parser=argparse.ArgumentParser(); parser.add_argument('--gf',required=True); parser.add_argument('--sshws',required=True); parser.add_argument('--payloadgate',required=True); args=parser.parse_args()
-    ports=[free_port() for _ in range(4)]; ssh,gf,ws,gate=ports; listener=backend(ssh); processes=[]
+    parser=argparse.ArgumentParser(); parser.add_argument('--sshws',required=True); parser.add_argument('--payloadgate',required=True); args=parser.parse_args()
+    ports=[free_port() for _ in range(3)]; ssh,ws,gate=ports; listener=backend(ssh); processes=[]
     try:
-        commands=[['node',args.gf,str(gf),'127.0.0.1',str(ssh)], [args.sshws,'-listen','127.0.0.1:'+str(ws),'-ssh-target','127.0.0.1:'+str(ssh)], [args.payloadgate,'-listen','127.0.0.1:'+str(gate),'-ssh-target','127.0.0.1:'+str(ssh),'-ws-target','127.0.0.1:'+str(ws),'-legacy-target','127.0.0.1:'+str(gf)]]
+        commands=[[args.sshws,'-listen','127.0.0.1:'+str(ws),'-ssh-target','127.0.0.1:'+str(ssh)], [args.payloadgate,'-listen','127.0.0.1:'+str(gate),'-ssh-target','127.0.0.1:'+str(ssh),'-ws-target','127.0.0.1:'+str(ws)]]
         for cmd in commands: processes.append(subprocess.Popen(cmd,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL))
-        for port in [gf,ws,gate]:
+        legacy(gate,b'GET',chained=True)
+        legacy(gate,b'CONNECT',fragmented=True)
+        for port in [ws,gate]:
             for _ in range(50):
                 try:
                     with socket.create_connection(('127.0.0.1',port),.1): pass
                     break
                 except OSError: time.sleep(.1)
             else: raise AssertionError('gateway did not start')
-        for port in [gf,gate]:
+        for port in [gate]:
             for method in [b'GET',b'CONNECT']:
                 print('legacy', port, method, flush=True); legacy(port,method)
+        legacy(gate,b'GET',chained=True)
+        legacy(gate,b'CONNECT',fragmented=True)
         for port in [ws,gate]:
             print('websocket',port,flush=True); websocket(port)
         print('PASS: GF GET/CONNECT banner and byte forwarding; direct and gateway WebSocket handshake and masked-frame forwarding (6 cases).')

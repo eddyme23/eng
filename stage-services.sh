@@ -11,7 +11,7 @@ die() { echo "v6 staging: $*" >&2; exit 1; }
 for file in haproxy-443.cfg nginx-main-tls.conf nginx-plain.conf nginx-ssh-only.conf tlsmux.service payloadgate.service; do
   [[ -s "$state_dir/$file" ]] || die "missing $file; run the render scripts first"
 done
-for bin in haproxy nginx go dropbear dropbearkey node; do command -v "$bin" >/dev/null 2>&1 || die "install $bin on the test VPS first"; done
+for bin in haproxy nginx go dropbear dropbearkey; do command -v "$bin" >/dev/null 2>&1 || die "install $bin on the test VPS first"; done
 
 "$script_dir/build-tlsmux.sh"
 "$script_dir/build-payloadgate.sh"
@@ -20,12 +20,11 @@ haproxy -c -f "$state_dir/haproxy-443.cfg"
 bash "$script_dir/validate-v6.sh"
 
 install -d -m 700 "$install_dir"
-install -d -m 755 "$runtime_dir" "$runtime_dir/tlsmux" "$runtime_dir/payloadgate" "$runtime_dir/sshws" "$runtime_dir/gfraw"
+install -d -m 755 "$runtime_dir" "$runtime_dir/tlsmux" "$runtime_dir/payloadgate" "$runtime_dir/sshws"
 install -m 755 "$script_dir"/*.sh "$runtime_dir/"
 install -m 644 "$script_dir/tlsmux/main.go" "$runtime_dir/tlsmux/main.go"
 install -m 644 "$script_dir/payloadgate/main.go" "$runtime_dir/payloadgate/main.go"
 install -m 644 "$script_dir/sshws/main.go" "$runtime_dir/sshws/main.go"
-install -m 644 "$script_dir/gfraw/proxy.js" "$runtime_dir/gfraw/proxy.js"
 ln -sfn "$runtime_dir/menu-v6.sh" /usr/local/bin/frimps-v6-menu
 ln -sfn "$runtime_dir/menu-v6.sh" /usr/local/bin/menu
 # Fresh Debian installations can have dropbear-bin installed without an
@@ -79,20 +78,6 @@ PrivateTmp=true
 WantedBy=multi-user.target
 EOF
 
-cat > /etc/systemd/system/frimps-v6-gfraw.service <<'EOF'
-[Unit]
-Description=Frimps v6 GF-compatible legacy payload gateway
-After=frimps-v6-dropbear.service
-Requires=frimps-v6-dropbear.service
-[Service]
-ExecStart=/usr/bin/node /usr/local/lib/frimps-v6/gfraw/proxy.js 3104 127.0.0.1 143
-Restart=on-failure
-NoNewPrivileges=true
-PrivateTmp=true
-
-[Install]
-WantedBy=multi-user.target
-EOF
 
 
 systemctl daemon-reload

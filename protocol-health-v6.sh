@@ -24,7 +24,7 @@ done
 
 if [[ "$mode" == '--live' ]]; then
   domain="$(jq -r '.primaryDomain' "$state_dir/routes.json")"
-  for unit in nginx haproxy frimps-v6-dropbear frimps-v6-sshws frimps-v6-tlsmux frimps-v6-payloadgate frimps-v6-gfraw; do
+  for unit in nginx haproxy frimps-v6-dropbear frimps-v6-sshws frimps-v6-tlsmux frimps-v6-payloadgate; do
     check_cmd systemctl is-active --quiet "$unit"
   done
   for port in 443 80 8080 8880 2082 2086; do

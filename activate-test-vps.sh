@@ -69,4 +69,10 @@ Run: $script_dir/protocol-health-v6.sh --live
 EOF
 chmod 600 "$state_dir/ACTIVE-TEST-VPS.md"
 activated=1
+# Retire the previous separate GF gateway only after public routing succeeds.
+if [[ -f /etc/systemd/system/frimps-v6-gfraw.service ]]; then
+  systemctl disable --now frimps-v6-gfraw.service
+  rm -f /etc/systemd/system/frimps-v6-gfraw.service
+  systemctl daemon-reload
+fi
 echo "v6 test-VPS activation completed. Run protocol-health-v6.sh --live."
