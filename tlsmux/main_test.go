@@ -14,7 +14,7 @@ func TestClassifyPreservesStream(t *testing.T) {
 			defer server.Close()
 			defer client.Close()
 			go func() { _, _ = io.WriteString(client, tc.data); _ = client.Close() }()
-			target, reader, err := classify(server, "ssh", "http", time.Second)
+			target, reader, err := classify(server, "ssh", "http")
 			if err != nil || target != tc.target {
 				t.Fatalf("target=%q err=%v", target, err)
 			}
@@ -26,29 +26,46 @@ func TestClassifyPreservesStream(t *testing.T) {
 	}
 }
 
-func TestIdleClientCanReadServerBanner(t *testing.T) {
-	server, client := net.Pipe()
-	defer server.Close()
-	defer client.Close()
-	target, reader, err := classify(server, "ssh", "http", 20*time.Millisecond)
-	if err != nil || target != "ssh" {
-		t.Fatalf("target=%q err=%v", target, err)
-	}
-	// The timeout must not remain in the buffered reader or connection.
-	go func() { _, _ = io.WriteString(client, "SSH-2.0-client\r\n"); _ = client.Close() }()
-	data, err := io.ReadAll(reader)
-	if err != nil || string(data) != "SSH-2.0-client\r\n" {
-		t.Fatalf("stream=%q err=%v", data, err)
-	}
-}
-
-func TestIncompleteHTTPDoesNotFallBackToSSH(t *testing.T) {
-	server, client := net.Pipe()
-	defer server.Close()
-	defer client.Close()
-	go func() { _, _ = io.WriteString(client, "GE") }()
-	target, _, err := classify(server, "ssh", "http", 30*time.Millisecond)
-	if err == nil || target == "ssh" {
-		t.Fatalf("target=%q err=%v", target, err)
+func TestClassificationWaitsForClientBytes(t *testing.T) {
+	for _, tc := range []struct{ prefix, rest, target string }{{"", "SSH-2.0-client\r\n", "ssh"}, {"GE", "T / HTTP/1.1\r\n", "http"}} {
+		t.Run(tc.target, func(t *testing.T) {
+			server, client := net.Pipe()
+			defer server.Close()
+			defer client.Close()
+			done := make(chan error, 1)
+			go func() {
+				target, reader, err := classify(server, "ssh", "http")
+				if err != nil {
+					done <- err
+					return
+				}
+				if target != tc.target {
+					done <- io.ErrUnexpectedEOF
+					return
+				}
+				data, err := io.ReadAll(reader)
+				if err == nil && string(data) != tc.prefix+tc.rest {
+					err = io.ErrUnexpectedEOF
+				}
+				done <- err
+			}()
+			if tc.prefix != "" {
+				_, _ = io.WriteString(client, tc.prefix)
+			}
+			select {
+			case err := <-done:
+				t.Fatalf("classified before client identification: %v", err)
+			case <-time.After(30 * time.Millisecond):
+			}
+			go func() { _, _ = io.WriteString(client, tc.rest); _ = client.Close() }()
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Fatal(err)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("classification did not finish after client data")
+			}
+		})
 	}
 }

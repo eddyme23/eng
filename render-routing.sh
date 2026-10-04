@@ -34,16 +34,9 @@ frontend public_plain_tcp
     bind :80
     bind :8080
     bind :8880
-    tcp-request inspect-delay 2s
-    acl openvpn_ws req.payload(0,0) -m reg ^GET[[:space:]]+/openvpn[[:space:]]
-    # Dispatch as soon as the request line is complete; retain the inspect
-    # window only for fragmented or unusual raw payloads.
-    acl request_line req.payload(0,0) -m reg ^[A-Z]+[[:space:]]+[^[:space:]]+[[:space:]]+HTTP/[0-9.]+
-    tcp-request content accept if request_line
-    tcp-request content accept if openvpn_ws
-    tcp-request content accept if { req.len gt 32768 }
-    use_backend openvpn_websocket if openvpn_ws
     default_backend ssh_http_gateway
+
+backend ssh_http_gateway
 
 backend openvpn_websocket
     server openvpn_websocket 127.0.0.1:10081
@@ -143,7 +136,7 @@ Description=Frimps v6 SSH payload gateway
 After=network.target
 
 [Service]
-ExecStart=/usr/local/libexec/frimps-v6-payloadgate -listen 127.0.0.1:3102 -ssh-target 127.0.0.1:143 -ws-target 127.0.0.1:3103
+ExecStart=/usr/local/libexec/frimps-v6-payloadgate -listen 127.0.0.1:3102 -ssh-target 127.0.0.1:143 -ws-target 127.0.0.1:3103 -openvpn-target 127.0.0.1:10081
 Restart=on-failure
 NoNewPrivileges=true
 PrivateTmp=true

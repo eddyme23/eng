@@ -88,7 +88,7 @@ func copyTunnel(client, backend net.Conn, inbound func() error) {
 	copies.Wait()
 }
 
-func handle(client net.Conn, sshTarget, wsTarget string) {
+func handle(client net.Conn, sshTarget, wsTarget, openvpnTarget string) {
 	defer client.Close()
 	_ = client.SetDeadline(time.Now().Add(30 * time.Second))
 	reader := bufio.NewReader(client)
@@ -99,7 +99,11 @@ func handle(client net.Conn, sshTarget, wsTarget string) {
 	}
 	target := sshTarget
 	websocket := hasWebSocketKey(header)
-	if websocket {
+	request := strings.Fields(strings.SplitN(string(header), "\n", 2)[0])
+	openvpn := len(request) >= 2 && request[0] == "GET" && request[1] == "/openvpn"
+	if openvpn {
+		target = openvpnTarget
+	} else if websocket {
 		target = wsTarget
 	}
 	backend, err := net.DialTimeout("tcp", target, 15*time.Second)
@@ -108,7 +112,7 @@ func handle(client net.Conn, sshTarget, wsTarget string) {
 		return
 	}
 	defer backend.Close()
-	if websocket {
+	if websocket || openvpn {
 		// sshws validates the upgrade and handles RFC 6455 framing.
 		_ = backend.SetWriteDeadline(time.Now().Add(15 * time.Second))
 		if _, err := backend.Write(header); err != nil {
@@ -145,6 +149,7 @@ func main() {
 	listen := flag.String("listen", "127.0.0.1:3102", "payload gateway listener")
 	sshTarget := flag.String("ssh-target", "127.0.0.1:143", "raw SSH target")
 	wsTarget := flag.String("ws-target", "127.0.0.1:3103", "SSH WebSocket target")
+	openvpnTarget := flag.String("openvpn-target", "127.0.0.1:10081", "OpenVPN HTTP upgrade target")
 	flag.Parse()
 	listener, err := net.Listen("tcp", *listen)
 	if err != nil {
@@ -157,6 +162,6 @@ func main() {
 			log.Printf("accept: %v", err)
 			continue
 		}
-		go handle(client, *sshTarget, *wsTarget)
+		go handle(client, *sshTarget, *wsTarget, *openvpnTarget)
 	}
 }
