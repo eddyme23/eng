@@ -1,4 +1,4 @@
-# Multi Script (Single IP)
+# Multi Script
 Recommended OS : **Debian 12** , logged in as `root`.
 
 #### Installation
