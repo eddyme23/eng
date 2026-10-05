@@ -256,7 +256,6 @@ while true; do
   item 10 'System Utilities (BBR / Netflix)'
   item 11 'Advanced Settings (domain / obfuscation)'
   item 12 'Reboot Server'
-  item 13 'Install / update SocksIP UDP (1195-3999)'
   printf '  [%b00%b] %bExit%b\n' "$RED" "$NC" "$BOLD" "$NC"
   echo
   read -r -p '  ► Select an option: ' choice
@@ -273,7 +272,6 @@ while true; do
     10) utilities_menu ;;
     11) settings_menu ;;
     12) read -r -p 'Reboot server now? [y/N] ' confirm; [[ "$confirm" =~ ^[Yy]$ ]] && reboot ;;
-    13) bash "$script_dir/apply-udp-updates.sh"; pause ;;
     0|00) exit 0 ;;
     *) echo 'Invalid option.'; sleep 1 ;;
   esac
