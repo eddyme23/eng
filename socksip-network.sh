@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Isolate the upstream raw-packet UDP server from all other protocol traffic.
 set -euo pipefail
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 [[ $EUID -eq 0 ]] || { echo 'run as root' >&2; exit 1; }
 ns=frimps-socksip
 iface="${V6_PUBLIC_INTERFACE:-$(ip -4 route show default | awk '/default/ {print $5; exit}')}"

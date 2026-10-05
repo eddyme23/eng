@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 [[ $EUID -eq 0 ]] || { echo 'run as root' >&2; exit 1; }
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 case "$(uname -m)" in x86_64|amd64) ;; *) echo 'SocksIP upstream binary requires Linux x86_64' >&2; exit 1 ;; esac

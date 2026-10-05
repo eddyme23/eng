@@ -2,6 +2,7 @@
 # Managed UDP ingress policy for the remaining v6 services.
 # This deliberately uses iptables because the legacy deployment already uses it.
 set -euo pipefail
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
 state_dir="${V6_STATE_DIR:-/etc/frimps-v6}"
 chain="V6_UDP_INGRESS"
@@ -74,6 +75,11 @@ apply() {
   add "$chain" -p udp --dport 50001:65535 -j DNAT --to-destination :36717
   # Prevent old catch-all rules from claiming now-unallocated ports.
   add "$chain" -p udp -j ACCEPT
+  # Switching from native nft to iptables must retire our old dedicated table;
+  # otherwise its previous DNAT rules can still claim the same public ports.
+  if command -v nft >/dev/null 2>&1; then
+    nft delete table ip frimps_v6_udp 2>/dev/null || true
+  fi
   install -d -m 700 "$state_dir"
   printf 'interface=%s\nchain=%s\n' "$public_if" "$chain" > "$state_dir/udp-routing.env"
   chmod 600 "$state_dir/udp-routing.env"
