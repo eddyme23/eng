@@ -27,7 +27,7 @@ class UdpRangesTest(unittest.TestCase):
             else: expected = 'unallocated'
             self.assertEqual(resolve(port), expected, port)
         self.assertIn('udp dport { 53, 443, 1194, 4000 } accept', source)
-        self.assertIn('iifname "$public_if" udp accept', source)
+        self.assertIn('iifname "$public_if" meta l4proto udp accept', source)
         for script in ('udp-routing.sh', 'socksip-network.sh', 'wireguard-nat.sh'):
             self.assertNotIn('iptables', (ROOT / script).read_text(encoding='utf-8').replace('legacy iptables rules', 'legacy rules'))
 

@@ -20,6 +20,7 @@ bash "$script_dir/socksip-install.sh"
 install -m 700 "$script_dir/udp-routing.sh" /usr/local/libexec/frimps-v6-udp-routing
 systemctl enable --now frimps-socksip-network.service
 systemctl restart frimps-socksip-network.service
+bash "$script_dir/udp-routing.sh" check
 systemctl restart frimps-v6-udp-routing.service
 systemctl enable --now frimps-socksip.service
 systemctl restart frimps-socksip.service
