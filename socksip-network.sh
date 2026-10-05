@@ -22,6 +22,9 @@ case "${1:-}" in
   ip -n "$ns" link set sipns0 up
   ip -n "$ns" route replace default via 169.254.240.1 dev sipns0
   sysctl -q -w net.ipv4.ip_forward=1
+  # Network namespaces have their own forwarding setting. Host forwarding
+  # does not enable traffic from the upstream server's tun0 to sipns0.
+  ip netns exec "$ns" sysctl -q -w net.ipv4.ip_forward=1
   install -d -m 755 "/etc/netns/$ns"
   printf 'nameserver 1.1.1.1\nnameserver 1.0.0.1\n' > "/etc/netns/$ns/resolv.conf"
   {

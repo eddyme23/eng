@@ -18,6 +18,11 @@ nft list table ip frimps_v6_udp || true
 nft list table ip frimps_socksip || true
 echo '=== Forwarding setting ==='
 sysctl net.ipv4.ip_forward
+ip netns exec frimps-socksip sysctl net.ipv4.ip_forward || true
+echo '=== Namespace internet and DNS test ==='
+if command -v curl >/dev/null; then
+  ip netns exec frimps-socksip curl -4 -sS --connect-timeout 5 --max-time 12 -o /dev/null -w 'HTTP %{http_code}; connect %{time_connect}s; total %{time_total}s\n' https://www.cloudflare.com/cdn-cgi/trace || true
+fi
 echo '=== Binary format and shared-library requirements ==='
 if command -v file >/dev/null; then file /etc/frimps-socksip/udpServer; fi
 if [[ -f /etc/frimps-socksip/udpServer ]]; then ldd /etc/frimps-socksip/udpServer 2>&1 || true; fi
