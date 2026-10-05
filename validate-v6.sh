@@ -6,9 +6,9 @@ check() { if "$@"; then printf '[ok] %s\n' "$*"; else printf '[fail] %s\n' "$*" 
 for file in routes.json backends.json runtime.env haproxy-443.cfg nginx-main-tls.conf nginx-plain.conf nginx-ssh-only.conf tlsmux.service payloadgate.service; do
   check test -s "$state_dir/$file"
 done
-check jq -e '.protocols == ["ssh", "slowdns", "udp-custom", "openvpn", "wireguard", "zivpn", "hysteria1", "hysteria2"]' "$state_dir/routes.json"
-check jq -e '.udpPriority == ["slowdns", "hysteria2", "openvpn", "wireguard", "zivpn", "hysteria1", "udp-custom"]' "$state_dir/routes.json"
-check jq -e '.udpCustomRanges == ["1-52", "54-442", "444-1193", "1195-3999", "4001-5299", "5300-5999", "50001-65535"]' "$state_dir/routes.json"
+check jq -e '.protocols == ["ssh", "slowdns", "udp-custom", "socksip", "openvpn", "wireguard", "zivpn", "hysteria1", "hysteria2"]' "$state_dir/routes.json"
+check jq -e '.udpPriority == ["slowdns", "hysteria2", "openvpn", "wireguard", "zivpn", "hysteria1", "socksip", "udp-custom"]' "$state_dir/routes.json"
+check jq -e '.udpCustomRanges == ["50001-65535"]' "$state_dir/routes.json"
 check jq -e 'any(.publicRoutes[]; .path == "/openvpn" and .backend == "openvpn-websocket:10081")' "$state_dir/backends.json"
 for port in 80 443 8080 8880 2082 2086; do check grep -q "bind :$port$" "$state_dir/haproxy-443.cfg"; done
 check grep -q -- '-openvpn-target 127.0.0.1:10081' "$state_dir/payloadgate.service"
@@ -20,5 +20,6 @@ check grep -q 'location = /openvpn' "$state_dir/nginx-main-tls.conf"
 check grep -q 'location = /' "$state_dir/nginx-main-tls.conf"
 check grep -q -- '-ssh-target 127.0.0.1:143' "$state_dir/tlsmux.service"
 check grep -q -- '-ws-target 127.0.0.1:3103' "$state_dir/payloadgate.service"
+check jq -e '.socksipRanges == ["1195-3999"]' "$state_dir/routes.json"
 [[ $fail -eq 0 ]] || exit 1
 echo 'Frimps foundation validation passed.'

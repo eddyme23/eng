@@ -53,7 +53,7 @@ show_ports() {
   port_row 'SSH Payload:' '80, 8080, 8880' 'Hysteria 2:' '443 UDP'
   port_row 'SSH WS:' '80,8080,8880,2082,2086' 'BadVPN:' '7300'
   port_row 'Hysteria 1:' '20000-50000' 'ZiVPN:' '6000-19999'
-  port_row 'UDPCustom:' 'Unreserved UDP ports' 'SlowDNS:' '53 UDP'
+  port_row 'UDPCustom:' '50001-65535 UDP' 'SocksIP:' '1195-3999 UDP'
   port_row 'OpenVPN:' '1194 TCP/UDP' 'OVPN SSL:' '8433'
   port_row 'OVPN WS:' '80,8080,8880,443 TLS' 'WireGuard:' '4000 UDP'
   printf '%b-------------------------- SYSTEM RESOURCES -------------------------%b\n' "$RED" "$NC"
@@ -74,7 +74,7 @@ status_menu() {
   clear
   menu_title 'FRIMPS SERVICE STATUS'
   echo
-  for unit in frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield hysteria1-server hysteria2-server wg-quick@wg0 frimps-slowdns zivpn frimps-badvpn frimps-udp-custom nginx haproxy; do
+  for unit in frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield hysteria1-server hysteria2-server wg-quick@wg0 frimps-slowdns zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip nginx haproxy; do
     printf '%-42s %s\n' "$unit" "$(systemctl is-active "$unit" 2>/dev/null || true)"
   done
   echo
@@ -223,10 +223,10 @@ maintenance_menu() {
 protocol_logs_menu() {
   while true; do
     clear; menu_title 'PROTOCOL LOGS (LAST 100 LINES)'
-    item 1 'SSH bridge'; item 2 'OpenVPN transports'; item 3 'Hysteria 1'; item 4 'Hysteria 2'; item 5 'WireGuard'; item 6 'ZiVPN'; item 7 'SlowDNS'; item 8 'UDP Custom / BadVPN'; back_item
+    item 1 'SSH bridge'; item 2 'OpenVPN transports'; item 3 'Hysteria 1'; item 4 'Hysteria 2'; item 5 'WireGuard'; item 6 'ZiVPN'; item 7 'SlowDNS'; item 8 'UDP Custom / BadVPN'; item 9 'SocksIP UDP'; back_item
     read -r -p '  ► Option: ' x
     case "$x" in
-      1) bash "$script_dir/maintenance-v6.sh" logs ssh; pause;; 2) bash "$script_dir/maintenance-v6.sh" logs openvpn; pause;; 3) bash "$script_dir/maintenance-v6.sh" logs hysteria1; pause;; 4) bash "$script_dir/maintenance-v6.sh" logs hysteria2; pause;; 5) bash "$script_dir/maintenance-v6.sh" logs wireguard; pause;; 6) bash "$script_dir/maintenance-v6.sh" logs zivpn; pause;; 7) bash "$script_dir/maintenance-v6.sh" logs slowdns; pause;; 8) bash "$script_dir/maintenance-v6.sh" logs udpcustom; pause;; 0) return;; *) printf '%bInvalid option.%b\n' "$RED" "$NC"; sleep 1;;
+      1) bash "$script_dir/maintenance-v6.sh" logs ssh; pause;; 2) bash "$script_dir/maintenance-v6.sh" logs openvpn; pause;; 3) bash "$script_dir/maintenance-v6.sh" logs hysteria1; pause;; 4) bash "$script_dir/maintenance-v6.sh" logs hysteria2; pause;; 5) bash "$script_dir/maintenance-v6.sh" logs wireguard; pause;; 6) bash "$script_dir/maintenance-v6.sh" logs zivpn; pause;; 7) bash "$script_dir/maintenance-v6.sh" logs slowdns; pause;; 8) bash "$script_dir/maintenance-v6.sh" logs udpcustom; pause;; 9) bash "$script_dir/maintenance-v6.sh" logs socksip; pause;; 0) return;; *) printf '%bInvalid option.%b\n' "$RED" "$NC"; sleep 1;;
     esac
   done
 }
@@ -244,7 +244,7 @@ while true; do
   clear
   show_ports
   echo
-  item 1 'SSH Account Management (SSH / SlowDNS / UDP Custom)'
+  item 1 'SSH Account Management (SSH / SlowDNS / UDP Custom / SocksIP)'
   item 2 'Hysteria 1 Account Management (UDP)'
   item 3 'Hysteria 2 Account Management (UDP)'
   item 4 'WireGuard Account Management (UDP)'
@@ -256,6 +256,7 @@ while true; do
   item 10 'System Utilities (BBR / Netflix)'
   item 11 'Advanced Settings (domain / obfuscation)'
   item 12 'Reboot Server'
+  item 13 'Install / update SocksIP UDP (1195-3999)'
   printf '  [%b00%b] %bExit%b\n' "$RED" "$NC" "$BOLD" "$NC"
   echo
   read -r -p '  ► Select an option: ' choice
@@ -272,6 +273,7 @@ while true; do
     10) utilities_menu ;;
     11) settings_menu ;;
     12) read -r -p 'Reboot server now? [y/N] ' confirm; [[ "$confirm" =~ ^[Yy]$ ]] && reboot ;;
+    13) bash "$script_dir/apply-udp-updates.sh"; pause ;;
     0|00) exit 0 ;;
     *) echo 'Invalid option.'; sleep 1 ;;
   esac

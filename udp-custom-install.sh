@@ -53,5 +53,5 @@ StandardError=journal
 WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
-echo 'UDP Custom backend configured on UDP 36717; Frimps routes only non-reserved UDP ports to it.'
-printf 'Test UDP Custom on public UDP 5300 using the VPS IPv4 address and a managed SSH account.\n'
+echo 'UDP Custom backend configured on UDP 36717; Frimps routes public UDP 50001-65535 to it.'
+printf 'Test UDP Custom on public UDP 53000 using the VPS IPv4 address and a managed SSH account.\n'

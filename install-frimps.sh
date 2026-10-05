@@ -206,13 +206,14 @@ fi
 bash "$script_dir/slowdns-install.sh"
 bash "$script_dir/zivpn-install.sh"
 bash "$script_dir/udp-custom-install.sh"
+bash "$script_dir/socksip-install.sh"
 
 note 'Enabling every installed Frimps service for this boot and future boots'
 bash "$script_dir/refresh-menu-v6.sh"
 systemctl enable --now certbot.timer
 bash "$script_dir/postflight-v6.sh"
 
-required_units='frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield hysteria1-server hysteria2-server wg-quick@wg0 frimps-slowdns zivpn frimps-badvpn frimps-udp-custom nginx haproxy'
+required_units='frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield hysteria1-server hysteria2-server wg-quick@wg0 frimps-slowdns zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip nginx haproxy'
 failed_units=()
 for unit in $required_units; do
   systemctl is-active --quiet "$unit" || failed_units+=("$unit")

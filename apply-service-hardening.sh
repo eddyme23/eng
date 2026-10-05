@@ -4,7 +4,7 @@
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo 'run as root' >&2; exit 1; }
 
-units='hysteria1-server.service hysteria2-server.service zivpn.service frimps-badvpn.service frimps-udp-custom.service frimps-openvpn-udp.service frimps-openvpn-tcp.service frimps-openvpn-gateway.service frimps-openvpn-bshield.service frimps-openvpn-stunnel.service'
+units='hysteria1-server.service hysteria2-server.service zivpn.service frimps-badvpn.service frimps-udp-custom.service frimps-socksip.service frimps-openvpn-udp.service frimps-openvpn-tcp.service frimps-openvpn-gateway.service frimps-openvpn-bshield.service frimps-openvpn-stunnel.service'
 changed=0
 for unit in $units; do
   systemctl cat "$unit" >/dev/null 2>&1 || continue

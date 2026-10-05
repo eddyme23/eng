@@ -162,7 +162,7 @@ WireGuard base configuration (only when no existing wg0 exists).
 Before enabling any daemon, provide a reviewed executable and a service-specific
 authenticated configuration. Required public routes are: Hysteria 1 UDP
 20000-50000 -> 36712; Hysteria 2 UDP 443; ZiVPN UDP 6000-19999 -> 5667;
-UDP Custom complementary ranges -> 36717; SlowDNS UDP 53.
+UDP Custom 50001-65535 -> 36717; SocksIP 1195-3999 -> isolated network; SlowDNS UDP 53.
 EOF
 chmod 600 "$state_dir/REMAINING_SERVICES.md"
 

@@ -48,3 +48,21 @@ bash ./apply-connection-fixes.sh
 
 Hysteria 1 account creation accepts an authentication password or generates a random password when left blank. Use that password with the existing server obfs shown in the account details. Deprecated Hysteria 1 import links are not generated; account menu option 5 edits speeds.
 
+
+## UDP ranges and SocksIP
+
+UDP Custom exclusively uses public IPv4 UDP **50001-65535** (test port **53000**).
+SocksIP UDP exclusively uses **1195-3999** (test port **2000**) and shares managed SSH accounts, passwords and expiry dates.
+The upstream x86_64 Linux raw-packet binary is checksum verified and runs in a dedicated network namespace. Only the SocksIP range is forwarded into it. Its internal address is 169.254.240.2; clients use the VPS IPv4 address.
+The original archive installer is not executed. Existing firewall configuration and package repositories are retained.
+SocksIP requires a real VPS/client compatibility test; local checks do not establish Debian runtime support or successful client authentication.
+
+To update an existing server (old UDP Custom ports, including 5300, stop routing to UDP Custom):
+
+```bash
+cd /root/eng
+git pull --ff-only origin main
+bash ./apply-udp-updates.sh
+```
+
+Open UDP 1195-3999 and 50001-65535 in the provider firewall. Use the SocksIP Android UDP mode for SocksIP and a UDP Custom client for UDP Custom.
