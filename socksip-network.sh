@@ -6,7 +6,7 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 ns=frimps-socksip
 iface="${V6_PUBLIC_INTERFACE:-$(ip -4 route show default | awk '/default/ {print $5; exit}')}"
 [[ "$iface" =~ ^[A-Za-z0-9_.:-]+$ ]] || { echo 'invalid public interface' >&2; exit 1; }
-remove_rule() { local table="$1"; shift; while iptables -t "$table" -C "$@" 2>/dev/null; do iptables -t "$table" -D "$@"; done; }
+command -v nft >/dev/null || { echo 'install nftables' >&2; exit 1; }
 case "${1:-}" in
  apply)
   if ! ip netns list | awk '{print $1}' | grep -qx "$ns"; then
@@ -24,17 +24,26 @@ case "${1:-}" in
   sysctl -q -w net.ipv4.ip_forward=1
   install -d -m 755 "/etc/netns/$ns"
   printf 'nameserver 1.1.1.1\nnameserver 1.0.0.1\n' > "/etc/netns/$ns/resolv.conf"
-  # Dedicated rules, removed by exact match on teardown.
-  iptables -t nat -C POSTROUTING -s 169.254.240.2/32 -o "$iface" -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s 169.254.240.2/32 -o "$iface" -j MASQUERADE
-  iptables -C FORWARD -i "$iface" -o siphost0 -p udp --dport 1195:3999 -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i "$iface" -o siphost0 -p udp --dport 1195:3999 -j ACCEPT
-  iptables -C FORWARD -i siphost0 -o "$iface" -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i siphost0 -o "$iface" -j ACCEPT
-  iptables -C FORWARD -i "$iface" -o siphost0 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || iptables -I FORWARD 1 -i "$iface" -o siphost0 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+  {
+    if nft list table ip frimps_socksip >/dev/null 2>&1; then echo 'delete table ip frimps_socksip'; fi
+    cat <<EOF
+ table ip frimps_socksip {
+  chain forward {
+   type filter hook forward priority filter; policy accept;
+   iifname "$iface" oifname "siphost0" udp dport 1195-3999 accept
+   iifname "siphost0" oifname "$iface" accept
+   iifname "$iface" oifname "siphost0" ct state established,related accept
+  }
+  chain postrouting {
+   type nat hook postrouting priority srcnat; policy accept;
+   ip saddr 169.254.240.2/32 oifname "$iface" masquerade
+  }
+ }
+EOF
+  } | nft -f -
   ;;
  remove)
-  remove_rule nat POSTROUTING -s 169.254.240.2/32 -o "$iface" -j MASQUERADE
-  remove_rule filter FORWARD -i "$iface" -o siphost0 -p udp --dport 1195:3999 -j ACCEPT
-  remove_rule filter FORWARD -i siphost0 -o "$iface" -j ACCEPT
-  remove_rule filter FORWARD -i "$iface" -o siphost0 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+  if nft list table ip frimps_socksip >/dev/null 2>&1; then nft delete table ip frimps_socksip; fi
   ip netns delete "$ns" 2>/dev/null || true
   ip link delete siphost0 2>/dev/null || true
   ;;

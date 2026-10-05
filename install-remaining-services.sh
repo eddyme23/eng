@@ -116,35 +116,7 @@ RemainAfterExit=yes
 [Install]
 WantedBy=multi-user.target
 EOF
-cat > /usr/local/libexec/frimps-v6-wireguard-nat <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-iface="$(ip -4 route show default | awk '/default/ {print $5; exit}')"
-if command -v nft >/dev/null 2>&1 && ! command -v iptables >/dev/null 2>&1; then
-  case "${1:-}" in
-    apply)
-      sysctl -q -w net.ipv4.ip_forward=1
-      nft delete table ip frimps_v6_wg 2>/dev/null || true
-      nft -f - <<EOF_NFT
-table ip frimps_v6_wg {
- chain forward { type filter hook forward priority filter; policy accept; iifname "wg0" accept; oifname "wg0" ct state established,related accept; }
- chain postrouting { type nat hook postrouting priority srcnat; policy accept; ip saddr 10.0.0.0/24 oifname "$iface" masquerade; }
-}
-EOF_NFT
-      ;;
-    remove) nft delete table ip frimps_v6_wg 2>/dev/null || true ;;
-    *) exit 2 ;;
-  esac
-  exit 0
-fi
-add() { iptables -C "$@" 2>/dev/null || iptables -A "$@"; }
-del() { while iptables -C "$@" 2>/dev/null; do iptables -D "$@"; done; }
-case "${1:-}" in
- apply) sysctl -q -p /etc/sysctl.d/99-frimps-v6-wireguard.conf; add FORWARD -i wg0 -j ACCEPT; add FORWARD -o wg0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT; iptables -t nat -C POSTROUTING -s 10.0.0.0/24 -o "$iface" -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -o "$iface" -j MASQUERADE ;;
- remove) del FORWARD -i wg0 -j ACCEPT; del FORWARD -o wg0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT; while iptables -t nat -C POSTROUTING -s 10.0.0.0/24 -o "$iface" -j MASQUERADE 2>/dev/null; do iptables -t nat -D POSTROUTING -s 10.0.0.0/24 -o "$iface" -j MASQUERADE; done ;;
- *) exit 2 ;;
-esac
-EOF
+install -m 700 "$script_dir/wireguard-nat.sh" /usr/local/libexec/frimps-v6-wireguard-nat
 chmod 700 /usr/local/libexec/frimps-v6-wireguard-nat
 cat > /etc/cron.d/frimps-v6-wireguard-expiry <<'EOF'
 13 0 * * * root /usr/local/libexec/frimps-v6-wireguard-accounts cleanup >/dev/null 2>&1

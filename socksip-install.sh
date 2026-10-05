@@ -5,7 +5,7 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 case "$(uname -m)" in x86_64|amd64) ;; *) echo 'SocksIP upstream binary requires Linux x86_64' >&2; exit 1 ;; esac
 apt-get update
-apt-get install -y curl iproute2 iptables ca-certificates
+apt-get install -y curl iproute2 nftables ca-certificates
 install -d -m 700 /etc/frimps-socksip
 download="$(mktemp /etc/frimps-socksip/.udpServer.XXXXXX)"
 trap 'rm -f "$download"' EXIT

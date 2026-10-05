@@ -20,6 +20,9 @@ install -m 700 "$script_dir/udp-routing.sh" "$helper_dir/frimps-v6-udp-routing"
 install -m 700 "$script_dir/hysteria1-render.sh" "$helper_dir/frimps-v6-hysteria1-render"
 install -m 700 "$script_dir/hysteria2-render.sh" "$helper_dir/frimps-v6-hysteria2-render"
 install -m 700 "$script_dir/wireguard-accounts.sh" "$helper_dir/frimps-v6-wireguard-accounts"
+if [[ -f /etc/systemd/system/frimps-v6-wireguard-nat.service ]]; then
+  install -m 700 "$script_dir/wireguard-nat.sh" "$helper_dir/frimps-v6-wireguard-nat"
+fi
 if [[ -f /etc/wireguard/wg0.conf ]]; then
   "$helper_dir/frimps-v6-wireguard-accounts" migrate-dns
 fi

@@ -27,7 +27,7 @@ else
   echo 'nft is not installed.'
 fi
 echo
-echo '[iptables NAT rules mentioning UDP]'
+echo '[legacy iptables rules (migration diagnostics only)]'
 if command -v iptables-save >/dev/null 2>&1; then
   iptables-save -t nat 2>/dev/null | grep -Ei 'udp|DNAT|REDIRECT' || true
 else

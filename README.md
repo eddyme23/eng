@@ -66,3 +66,5 @@ bash ./apply-udp-updates.sh
 ```
 
 Open UDP 1195-3999 and 50001-65535 in the provider firewall. Use the SocksIP Android UDP mode for SocksIP and a UDP Custom client for UDP Custom.
+
+Managed UDP, SocksIP and WireGuard routing now use native nftables regardless of whether iptables is installed. The updater backs up the nftables ruleset and retires only known older Frimps iptables rules after their nftables replacements are active. Other applications' firewall rules and installed packages are retained. A boot migration service also retires old Frimps rules after netfilter-persistent restores saved rules.
