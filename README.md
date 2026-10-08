@@ -46,3 +46,6 @@ Run `bash ./postflight-v6.sh` and `bash ./protocol-health-v6.sh --live` after in
 git pull --ff-only origin main
 bash ./apply-connection-fixes.sh
 ```
+
+SSL Direct compatibility: after the TLS handshake, silent clients are routed to Dropbear after 250 ms so they can receive its SSH banner. Clients sending application data immediately are classified immediately; fragmented requests remain buffered without the idle fallback. HTTP/2 uses ALPN routing.
+

@@ -69,3 +69,38 @@ func TestClassificationWaitsForClientBytes(t *testing.T) {
 		})
 	}
 }
+
+func TestSilentClientFallsBackAndDeadlineClears(t *testing.T) {
+	server, client := net.Pipe()
+	defer server.Close()
+	defer client.Close()
+	target, reader, err := classifyWithTimeout(server, "ssh", "http", 20*time.Millisecond)
+	if err != nil || target != "ssh" {
+		t.Fatalf("target=%q err=%v", target, err)
+	}
+	go func() { time.Sleep(30 * time.Millisecond); _, _ = io.WriteString(client, "SSH-") }()
+	data := make([]byte, 4)
+	if _, err := io.ReadFull(reader, data); err != nil || string(data) != "SSH-" {
+		t.Fatalf("read after idle fallback: %q %v", data, err)
+	}
+}
+
+func TestPartialHTTPDoesNotFallBack(t *testing.T) {
+	server, client := net.Pipe()
+	defer server.Close()
+	defer client.Close()
+	go func() {
+		_, _ = io.WriteString(client, "G")
+		time.Sleep(60 * time.Millisecond)
+		_, _ = io.WriteString(client, "ET / HTTP/1.1\r\n")
+		_ = client.Close()
+	}()
+	target, reader, err := classifyWithTimeout(server, "ssh", "http", 20*time.Millisecond)
+	if err != nil || target != "http" {
+		t.Fatalf("target=%q err=%v", target, err)
+	}
+	data, err := io.ReadAll(reader)
+	if err != nil || string(data) != "GET / HTTP/1.1\r\n" {
+		t.Fatalf("stream=%q err=%v", data, err)
+	}
+}

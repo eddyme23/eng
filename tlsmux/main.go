@@ -80,9 +80,26 @@ func main() {
 	}
 }
 
-// GF-style dispatch waits for client bytes, without an idle fallback timer.
+// A silent TLS client may be waiting for Dropbear to send its SSH banner.
 func classify(c net.Conn, sshTarget, httpTarget string) (string, *bufio.Reader, error) {
+	return classifyWithTimeout(c, sshTarget, httpTarget, 250*time.Millisecond)
+}
+
+func classifyWithTimeout(c net.Conn, sshTarget, httpTarget string, idle time.Duration) (string, *bufio.Reader, error) {
 	reader := bufio.NewReader(c)
+	if err := c.SetReadDeadline(time.Now().Add(idle)); err != nil {
+		return "", reader, err
+	}
+	_, err := reader.Peek(1)
+	_ = c.SetReadDeadline(time.Time{})
+	if err != nil {
+		if timeout, ok := err.(net.Error); ok && timeout.Timeout() && reader.Buffered() == 0 {
+			return sshTarget, reader, nil
+		}
+		return "", reader, err
+	}
+	// Once any application data arrives, preserve fragmented HTTP/SSH input
+	// rather than mistaking a slow partial HTTP request for silent SSH.
 	prefix, err := reader.Peek(4)
 	if err != nil {
 		return "", reader, err
