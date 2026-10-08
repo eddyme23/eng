@@ -49,3 +49,11 @@ bash ./apply-connection-fixes.sh
 
 SSL Direct compatibility: after the TLS handshake, silent clients are routed to Dropbear after 250 ms so they can receive its SSH banner. Clients sending application data immediately are classified immediately; fragmented requests remain buffered without the idle fallback. HTTP/2 uses ALPN routing.
 
+
+### Gateway connection handling
+
+Run `bash ./apply-connection-fixes.sh` after updating to rebuild and restart the TLS, payload and SSH WebSocket gateways. Existing gateway sessions disconnect during the restart.
+
+Silent SSL Direct clients fall back to SSH after 250 ms. Clients that send a prefix immediately do not wait for that timeout; incomplete prefixes have a separate 15-second limit. TLS and WebSocket backend connection attempts are limited to 5 seconds. The WebSocket HTTP header limit is 15 seconds; established sessions have no new idle timeout. WebSocket pings receive matching pongs.
+
+To tune the silent fallback, create `/etc/frimps-v6/tlsmux.env` containing `FRIMPS_TLS_SILENT_TIMEOUT=250ms`. Add `FRIMPS_TLS_LOG_TIMING=true` for diagnostic handshake, classification and backend connection timings, then restart `frimps-v6-tlsmux`. Timing logs are off by default and visible through `journalctl -u frimps-v6-tlsmux`. A shorter fallback can misroute delayed HTTP clients to SSH.

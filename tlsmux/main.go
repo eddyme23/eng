@@ -12,12 +12,16 @@ import (
 	"time"
 )
 
-func proxy(client net.Conn, reader io.Reader, target string) {
-	backend, err := net.Dial("tcp", target)
+func proxy(client net.Conn, reader io.Reader, target string, connectTimeout time.Duration, timing bool) {
+	started := time.Now()
+	backend, err := net.DialTimeout("tcp", target, connectTimeout)
 	if err != nil {
 		log.Printf("connect %s: %v", target, err)
 		_ = client.Close()
 		return
+	}
+	if timing {
+		log.Printf("backend ready target=%s connect=%s", target, time.Since(started))
 	}
 	defer backend.Close()
 	defer client.Close()
@@ -36,7 +40,14 @@ func main() {
 	sshTarget := flag.String("ssh-target", "127.0.0.1:143", "raw SSH target")
 	http1Target := flag.String("http1-target", "127.0.0.1:9081", "HTTP/1.1 target")
 	h2Target := flag.String("h2-target", "127.0.0.1:9080", "HTTP/2 target")
+	silentTimeout := flag.Duration("silent-timeout", 250*time.Millisecond, "silent TLS client fallback to SSH")
+	identifyTimeout := flag.Duration("identify-timeout", 15*time.Second, "maximum time to finish a partial protocol prefix")
+	connectTimeout := flag.Duration("connect-timeout", 5*time.Second, "backend connection limit")
+	timing := flag.Bool("log-timing", false, "log TLS handshake, routing and backend connection durations")
 	flag.Parse()
+	if *silentTimeout <= 0 || *identifyTimeout <= 0 || *connectTimeout <= 0 {
+		log.Fatal("timeouts must be positive")
+	}
 
 	cert, err := tls.LoadX509KeyPair(*certPath, *keyPath)
 	if err != nil {
@@ -56,12 +67,14 @@ func main() {
 		}
 		go func(c net.Conn) {
 			defer func() { _ = c.Close() }()
+			started := time.Now()
 			tlsConn := c.(*tls.Conn)
 			_ = c.SetDeadline(time.Now().Add(15 * time.Second))
 			if err := tlsConn.Handshake(); err != nil {
 				log.Printf("TLS handshake: %v", err)
 				return
 			}
+			handshakeElapsed := time.Since(started)
 			_ = c.SetDeadline(time.Time{})
 			reader := bufio.NewReader(c)
 			target := *http1Target
@@ -69,13 +82,16 @@ func main() {
 				target = *h2Target
 			} else {
 				var err error
-				target, reader, err = classify(c, *sshTarget, *http1Target)
+				target, reader, err = classifyWithLimits(c, *sshTarget, *http1Target, *silentTimeout, *identifyTimeout)
 				if err != nil {
 					log.Printf("classify TLS stream: %v", err)
 					return
 				}
 			}
-			proxy(c, reader, target)
+			if *timing {
+				log.Printf("TLS route target=%s handshake=%s classify=%s", target, handshakeElapsed, time.Since(started)-handshakeElapsed)
+			}
+			proxy(c, reader, target, *connectTimeout, *timing)
 		}(conn)
 	}
 }
@@ -86,6 +102,10 @@ func classify(c net.Conn, sshTarget, httpTarget string) (string, *bufio.Reader, 
 }
 
 func classifyWithTimeout(c net.Conn, sshTarget, httpTarget string, idle time.Duration) (string, *bufio.Reader, error) {
+	return classifyWithLimits(c, sshTarget, httpTarget, idle, 15*time.Second)
+}
+
+func classifyWithLimits(c net.Conn, sshTarget, httpTarget string, idle, identify time.Duration) (string, *bufio.Reader, error) {
 	reader := bufio.NewReader(c)
 	if err := c.SetReadDeadline(time.Now().Add(idle)); err != nil {
 		return "", reader, err
@@ -98,8 +118,11 @@ func classifyWithTimeout(c net.Conn, sshTarget, httpTarget string, idle time.Dur
 		}
 		return "", reader, err
 	}
-	// Once any application data arrives, preserve fragmented HTTP/SSH input
-	// rather than mistaking a slow partial HTTP request for silent SSH.
+	// A partial prefix gets a separate limit and must never fall back to SSH.
+	if err := c.SetReadDeadline(time.Now().Add(identify)); err != nil {
+		return "", reader, err
+	}
+	defer c.SetReadDeadline(time.Time{})
 	prefix, err := reader.Peek(4)
 	if err != nil {
 		return "", reader, err

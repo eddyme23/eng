@@ -11,17 +11,23 @@ install -d -m 700 "$backup_dir"
 cp -a /etc/haproxy/haproxy.cfg "$backup_dir/haproxy.cfg"
 cp -a /usr/local/libexec/frimps-v6-tlsmux "$backup_dir/tlsmux.previous"
 cp -a /usr/local/libexec/frimps-v6-payloadgate "$backup_dir/payloadgate.previous"
+cp -a /usr/local/libexec/frimps-v6-sshws "$backup_dir/sshws.previous"
+cp -a /etc/systemd/system/frimps-v6-tlsmux.service "$backup_dir/tlsmux.service.previous"
 # Build into the backup directory first; leave the running binary in place
 # until the new public routing configuration passes HAProxy validation.
 V6_TLSMUX_OUTPUT="$backup_dir/build/tlsmux.new" bash "$script_dir/build-tlsmux.sh"
 V6_PAYLOADGATE_OUTPUT="$backup_dir/build/payloadgate.new" bash "$script_dir/build-payloadgate.sh"
+V6_SSHWS_OUTPUT="$backup_dir/build/sshws.new" bash "$script_dir/build-sshws.sh"
 bash "$script_dir/render-routing.sh"
 bash "$script_dir/validate-v6.sh"
 haproxy -c -f "$state_dir/haproxy-443.cfg"
 install -m 755 "$backup_dir/build/tlsmux.new" /usr/local/libexec/frimps-v6-tlsmux
 install -m 600 "$state_dir/haproxy-443.cfg" /etc/haproxy/haproxy.cfg
 install -m 755 "$backup_dir/build/payloadgate.new" /usr/local/libexec/frimps-v6-payloadgate
-systemctl restart frimps-v6-tlsmux.service frimps-v6-payloadgate.service
+install -m 755 "$backup_dir/build/sshws.new" /usr/local/libexec/frimps-v6-sshws
+install -m 644 "$state_dir/tlsmux.service" /etc/systemd/system/frimps-v6-tlsmux.service
+systemctl daemon-reload
+systemctl restart frimps-v6-tlsmux.service frimps-v6-payloadgate.service frimps-v6-sshws.service
 systemctl reload haproxy.service
 bash "$script_dir/refresh-menu-v6.sh"
 printf 'Connection fixes applied. Proxy backup: %s\n' "$backup_dir"

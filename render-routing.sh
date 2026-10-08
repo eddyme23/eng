@@ -117,7 +117,10 @@ Description=Frimps v6 TLS multiplexer
 After=network.target
 
 [Service]
-ExecStart=/usr/local/libexec/frimps-v6-tlsmux -listen 127.0.0.1:9443 -cert $cert_file -key $key_file -ssh-target 127.0.0.1:143 -http1-target 127.0.0.1:9081 -h2-target 127.0.0.1:9080
+Environment="FRIMPS_TLS_SILENT_TIMEOUT=250ms"
+Environment="FRIMPS_TLS_LOG_TIMING=false"
+EnvironmentFile=-/etc/frimps-v6/tlsmux.env
+ExecStart=/usr/local/libexec/frimps-v6-tlsmux -listen 127.0.0.1:9443 -cert $cert_file -key $key_file -ssh-target 127.0.0.1:143 -http1-target 127.0.0.1:9081 -h2-target 127.0.0.1:9080 -silent-timeout \${FRIMPS_TLS_SILENT_TIMEOUT} -identify-timeout 15s -connect-timeout 5s -log-timing=\${FRIMPS_TLS_LOG_TIMING}
 Restart=on-failure
 NoNewPrivileges=true
 PrivateTmp=true

@@ -104,3 +104,17 @@ func TestPartialHTTPDoesNotFallBack(t *testing.T) {
 		t.Fatalf("stream=%q err=%v", data, err)
 	}
 }
+
+func TestStalledPartialPrefixTimesOut(t *testing.T) {
+	server, client := net.Pipe()
+	defer server.Close()
+	defer client.Close()
+	go func() { _, _ = io.WriteString(client, "G") }()
+	target, _, err := classifyWithLimits(server, "ssh", "http", time.Second, 20*time.Millisecond)
+	if err == nil || target != "" {
+		t.Fatalf("partial prefix routed: %q %v", target, err)
+	}
+	if timeout, ok := err.(net.Error); !ok || !timeout.Timeout() {
+		t.Fatalf("expected timeout: %v", err)
+	}
+}

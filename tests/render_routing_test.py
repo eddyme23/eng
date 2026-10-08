@@ -16,6 +16,9 @@ class RoutingTemplateTest(unittest.TestCase):
         for port in [80,443,8080,8880,2082,2086]:
             self.assertIn('bind :'+str(port)+'\n',config)
         self.assertNotIn('inspect-delay',config)
+        self.assertIn('EnvironmentFile=-/etc/frimps-v6/tlsmux.env', source)
+        self.assertIn(r'-silent-timeout \${FRIMPS_TLS_SILENT_TIMEOUT}', source)
+        self.assertIn('-identify-timeout 15s -connect-timeout 5s', source)
         self.assertIn('-openvpn-target 127.0.0.1:10081',source)
 
 if __name__=='__main__':unittest.main()
