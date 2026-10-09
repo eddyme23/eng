@@ -80,3 +80,9 @@ systemctl disable --now frimps-hcr-test.service
 rm -f /etc/systemd/system/frimps-hcr-test.service
 systemctl daemon-reload
 ```
+
+### Integrated optional HCR
+
+Run `bash ./hcr-install.sh` to download the pinned Linux amd64 binary from `eddyme23/hrc-server`, verify its SHA-256 and install HCR plain on TCP 8881. No manual upload is required. Existing `frimps-hcr-test` connections disconnect when the trial migrates to managed `frimps-hcr`; WebSocket listeners stay unchanged. The new service starts at boot and uses existing OpenSSH accounts. Defaults remain 6144-byte download frames and an 8-second polling timeout.
+
+HCR is optional: select its installer under maintenance in the menu, or set `V6_INSTALL_HCR=1` for a fresh installation. `HCR_PORT`, `HCR_MAX_DOWNLOAD_FRAME` and `HCR_DOWNLOAD_POLL_TIMEOUT` can be set before installation. Connection details appear in new SSH account output when HCR is active. Status/restart controls and HCR logs are available in the menu; `bash ./hcr-audit.sh` gives diagnostics. Live health checks verify the service and listener, not a complete client login. Allow the HCR TCP port in any provider or host firewall when necessary.

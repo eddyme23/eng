@@ -30,6 +30,11 @@ if [[ "$mode" == '--live' ]]; then
   for port in 443 80 8080 8880 2082 2086; do
     check_listener "$port"
   done
+  if [[ -s "$state_dir/hcr.env" ]]; then
+    source "$state_dir/hcr.env"
+    check_cmd systemctl is-active --quiet frimps-hcr
+    check_listener "$HCR_PORT"
+  fi
   check_cmd openssl s_client -connect "127.0.0.1:443" -servername "$domain" -brief
 
 fi

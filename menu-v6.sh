@@ -74,7 +74,7 @@ status_menu() {
   clear
   menu_title 'FRIMPS SERVICE STATUS'
   echo
-  for unit in frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield hysteria1-server hysteria2-server wg-quick@wg0 frimps-slowdns zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip nginx haproxy; do
+  for unit in frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-hcr frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield hysteria1-server hysteria2-server wg-quick@wg0 frimps-slowdns zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip nginx haproxy; do
     printf '%-42s %s\n' "$unit" "$(systemctl is-active "$unit" 2>/dev/null || true)"
   done
   echo
@@ -212,21 +212,35 @@ utilities_menu() {
 maintenance_menu() {
   while true; do
     clear; menu_title 'SERVICE CONTROLS'
-    item 1 'Restart SSH services'; item 2 'Restart UDP services'; item 3 'Restart OpenVPN services'; item 4 'Restart WireGuard'; item 5 'Restart all Frimps services'; item 6 'Create managed-state backup'; item 7 'Remove expired managed accounts'; item 8 'View protocol logs'; back_item
+    item 1 'Restart SSH services'; item 2 'Restart UDP services'; item 3 'Restart OpenVPN services'; item 4 'Restart WireGuard'; item 5 'Restart all Frimps services'; item 6 'Create managed-state backup'; item 7 'Remove expired managed accounts'; item 8 'View protocol logs'; item 9 'HCR install / status / restart'; back_item
     read -r -p '  ► Option: ' x
     case "$x" in
-      1) bash "$script_dir/maintenance-v6.sh" restart ssh; pause;; 2) bash "$script_dir/maintenance-v6.sh" restart udp; pause;; 3) bash "$script_dir/maintenance-v6.sh" restart openvpn; pause;; 4) bash "$script_dir/maintenance-v6.sh" restart wireguard; pause;; 5) read -r -p 'Restart all managed services? [y/N] ' confirm; [[ "$confirm" =~ ^[Yy]$ ]] && bash "$script_dir/maintenance-v6.sh" restart all; pause;; 6) bash "$script_dir/maintenance-v6.sh" backup; pause;; 7) read -r -p 'Remove expired managed accounts? [y/N] ' confirm; [[ "$confirm" =~ ^[Yy]$ ]] && bash "$script_dir/maintenance-v6.sh" cleanup; pause;; 8) protocol_logs_menu;; 0) return;; *) printf '%bInvalid option.%b\n' "$RED" "$NC"; sleep 1;;
+      1) bash "$script_dir/maintenance-v6.sh" restart ssh; pause;; 2) bash "$script_dir/maintenance-v6.sh" restart udp; pause;; 3) bash "$script_dir/maintenance-v6.sh" restart openvpn; pause;; 4) bash "$script_dir/maintenance-v6.sh" restart wireguard; pause;; 5) read -r -p 'Restart all managed services? [y/N] ' confirm; [[ "$confirm" =~ ^[Yy]$ ]] && bash "$script_dir/maintenance-v6.sh" restart all; pause;; 6) bash "$script_dir/maintenance-v6.sh" backup; pause;; 7) read -r -p 'Remove expired managed accounts? [y/N] ' confirm; [[ "$confirm" =~ ^[Yy]$ ]] && bash "$script_dir/maintenance-v6.sh" cleanup; pause;; 8) protocol_logs_menu;; 9) hcr_menu;; 0) return;; *) printf '%bInvalid option.%b\n' "$RED" "$NC"; sleep 1;;
     esac
   done
+}
+
+hcr_menu() {
+ while true; do
+  clear; menu_title 'HCR SSH TRANSPORT'
+  item 1 'Install HCR plain on port 8881'; item 2 'Status and diagnostics'; item 3 'Restart HCR'; back_item
+  read -r -p '  ► Option: ' x
+  case "$x" in
+   1) bash "$script_dir/hcr-install.sh"; pause;;
+   2) bash "$script_dir/hcr-audit.sh"; pause;;
+   3) systemctl restart frimps-hcr.service; pause;;
+   0) return;; *) echo 'Invalid option.';;
+  esac
+ done
 }
 
 protocol_logs_menu() {
   while true; do
     clear; menu_title 'PROTOCOL LOGS (LAST 100 LINES)'
-    item 1 'SSH bridge'; item 2 'OpenVPN transports'; item 3 'Hysteria 1'; item 4 'Hysteria 2'; item 5 'WireGuard'; item 6 'ZiVPN'; item 7 'SlowDNS'; item 8 'UDP Custom / BadVPN'; item 9 'SocksIP UDP'; back_item
+    item 1 'SSH bridge'; item 2 'OpenVPN transports'; item 3 'Hysteria 1'; item 4 'Hysteria 2'; item 5 'WireGuard'; item 6 'ZiVPN'; item 7 'SlowDNS'; item 8 'UDP Custom / BadVPN'; item 9 'SocksIP UDP'; item 10 'HCR SSH'; back_item
     read -r -p '  ► Option: ' x
     case "$x" in
-      1) bash "$script_dir/maintenance-v6.sh" logs ssh; pause;; 2) bash "$script_dir/maintenance-v6.sh" logs openvpn; pause;; 3) bash "$script_dir/maintenance-v6.sh" logs hysteria1; pause;; 4) bash "$script_dir/maintenance-v6.sh" logs hysteria2; pause;; 5) bash "$script_dir/maintenance-v6.sh" logs wireguard; pause;; 6) bash "$script_dir/maintenance-v6.sh" logs zivpn; pause;; 7) bash "$script_dir/maintenance-v6.sh" logs slowdns; pause;; 8) bash "$script_dir/maintenance-v6.sh" logs udpcustom; pause;; 9) bash "$script_dir/maintenance-v6.sh" logs socksip; pause;; 0) return;; *) printf '%bInvalid option.%b\n' "$RED" "$NC"; sleep 1;;
+      1) bash "$script_dir/maintenance-v6.sh" logs ssh; pause;; 2) bash "$script_dir/maintenance-v6.sh" logs openvpn; pause;; 3) bash "$script_dir/maintenance-v6.sh" logs hysteria1; pause;; 4) bash "$script_dir/maintenance-v6.sh" logs hysteria2; pause;; 5) bash "$script_dir/maintenance-v6.sh" logs wireguard; pause;; 6) bash "$script_dir/maintenance-v6.sh" logs zivpn; pause;; 7) bash "$script_dir/maintenance-v6.sh" logs slowdns; pause;; 8) bash "$script_dir/maintenance-v6.sh" logs udpcustom; pause;; 9) bash "$script_dir/maintenance-v6.sh" logs socksip; pause;; 10) bash "$script_dir/maintenance-v6.sh" logs hcr; pause;; 0) return;; *) printf '%bInvalid option.%b\n' "$RED" "$NC"; sleep 1;;
     esac
   done
 }
