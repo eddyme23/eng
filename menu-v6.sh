@@ -30,8 +30,10 @@ load_runtime() { [[ -r "$state_dir/runtime.env" ]] && source "$state_dir/runtime
 pick_account_store() { local store="$1" field="${2:-name}" label="${3:-Account}" i; mapfile -t names < <(jq -r ".[] | .$field" "$store" 2>/dev/null); ((${#names[@]})) || { echo "No $label accounts found."; return 1; }; menu_title "SELECT $label ACCOUNT"; for i in "${!names[@]}"; do item "$((i+1))" "${names[$i]}"; done; back_item; read -r -p '  ► Select account: ' i; [[ "$i" =~ ^[0-9]+$ ]] && ((i>0 && i<=${#names[@]})) || return 1; account="${names[$((i-1))]}"; }
 
 show_ports() {
-  local domain os_name arch cores now ram cpu buffer idle idle2 total total2 work
-  domain="$(primary_domain 2>/dev/null || hostname -f 2>/dev/null || hostname)"
+  local server_ip os_name arch cores now ram cpu buffer idle idle2 total total2 work
+  server_ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i == "src") {print $(i+1); exit}}')"
+  [[ -n "$server_ip" ]] || server_ip="$(ip -4 -o addr show scope global 2>/dev/null | awk 'NR==1 {split($4,a,"/"); print a[1]}')"
+  server_ip="${server_ip:-Not detected}"
   os_name="$(. /etc/os-release 2>/dev/null; printf '%s %s' "${ID:-Linux}" "${VERSION_ID:-}")"
   os_name="${os_name^^}"; arch="$(uname -m)"; cores="$(nproc 2>/dev/null || echo '?')"; now="$(date -u '+%H:%M GMT')"
   ram="$(free 2>/dev/null | awk '/^Mem:/ {printf "%.1f%%", ($3/$2)*100}' || echo n/a)"
@@ -45,7 +47,7 @@ show_ports() {
   printf '              %b>>>>  🐉  FRIMPS  ★  PLUS  🐉  <<<<%b\n' "$YELLOW" "$NC"
   line
   printf '  %bOS:%b   %-18s%bArch:%b  %-15s%bCores:%b  %s\n' "$WHITE" "$NC" "$os_name" "$WHITE" "$NC" "$arch" "$WHITE" "$NC" "$cores"
-  printf '  %bDomain:%b   %-17s%bTime:%b  %-15s%bStatus:%b %bONLINE%b\n' "$WHITE" "$NC" "$domain" "$WHITE" "$NC" "$now" "$WHITE" "$NC" "$GREEN" "$NC"
+  printf '  %bIP:%b       %-17s  %bTime:%b  %-15s%bStatus:%b %bONLINE%b\n' "$WHITE" "$NC" "$server_ip" "$WHITE" "$NC" "$now" "$WHITE" "$NC" "$GREEN" "$NC"
   printf '%b--------------------------- PROTOCOL PORTS --------------------------%b\n' "$RED" "$NC"
   port_row 'SSH:' '22 / 143 local' 'System-DNS:' '53'
   port_row 'Dropbear:' '143 (local)' 'TLS gateway:' '443'
