@@ -46,8 +46,8 @@ show_ports() {
   line
   printf '              %b>>>>  🐉  FRIMPS  ★  PLUS  🐉  <<<<%b\n' "$YELLOW" "$NC"
   line
-  printf '  %bOS:%b   %-18s%bArch:%b  %-15s%bCores:%b  %s\n' "$WHITE" "$NC" "$os_name" "$WHITE" "$NC" "$arch" "$WHITE" "$NC" "$cores"
-  printf '  %bIP:%b       %-17s  %bTime:%b  %-15s%bStatus:%b %bONLINE%b\n' "$WHITE" "$NC" "$server_ip" "$WHITE" "$NC" "$now" "$WHITE" "$NC" "$GREEN" "$NC"
+  printf '  %b%-7s%b %-18s  %b%-6s%b %-12s  %b%-7s%b %s\n' "$WHITE" "OS:" "$NC" "$os_name" "$WHITE" "Arch:" "$NC" "$arch" "$WHITE" "Cores:" "$NC" "$cores"
+  printf '  %b%-7s%b %-18s  %b%-6s%b %-12s  %b%-7s%b %bONLINE%b\n' "$WHITE" "IP:" "$NC" "$server_ip" "$WHITE" "Time:" "$NC" "$now" "$WHITE" "Status:" "$NC" "$GREEN" "$NC"
   printf '%b--------------------------- PROTOCOL PORTS --------------------------%b\n' "$RED" "$NC"
   port_row 'SSH:' '22 / 143 local' 'System-DNS:' '53'
   port_row 'Dropbear:' '143 (local)' 'TLS gateway:' '443'
