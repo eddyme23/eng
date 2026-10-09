@@ -90,15 +90,15 @@ case "$action" in
     printf '  %bExpiry%b     : %b%s%b\n' "$WHITE" "$NC" "$YELLOW" "$expiry" "$NC"
     printf '%b--------------------------------------------------------------%b\n' "$CYAN" "$NC"
     printf '  SSH Port   : 22, 143\n  Dropbear   : 143 (local)\n  SSL/TLS    : 443\n  SSL/WS     : 443\n  WebSocket  : 80, 8080, 8880, 2082, 2086\n  SlowDNS    : 53/UDP\n  UDP Custom : 50001-65535 (UDP)\n  SocksIP UDP: 1195-3999 (UDP)\n'
-    printf '%b--------------------------------------------------------------%b\n' "$CYAN" "$NC"
     if [[ -s "$state_dir/hcr.env" ]] && systemctl is-active --quiet frimps-hcr.service; then
       source "$state_dir/hcr.env"
-      printf '  HCR Plain  : %s:%s (HTTP Custom HCR; same SSH username/password)\n' "$slowdns_ip" "$HCR_PORT"
+      printf '  HCR NTLS   : %s:%s (HTTP Custom HCR)\n' "$slowdns_ip" "$HCR_PORT"
     fi
     if [[ -s "$state_dir/hcr-tls.env" ]] && systemctl is-active --quiet frimps-hcr-tls.service; then
       source "$state_dir/hcr-tls.env"
-      printf '  HCR TLS    : %s:%s (SNI/domain: %s; same SSH username/password)\n' "$slowdns_ip" "$HCR_TLS_PORT" "$domain"
+      printf '  HCR TLS    : %s:%s (HTTP Custom HCR)\n' "$domain" "$HCR_TLS_PORT"
     fi
+    printf '%b--------------------------------------------------------------%b\n' "$CYAN" "$NC"
     printf '  %bPayload HTTP:%b\n  %bGET / HTTP/1.1[crlf]Host: %s[crlf]Connection: Upgrade[crlf]Upgrade: websocket[crlf][crlf]%b\n\n' "$BOLD" "$NC" "$YELLOW" "$domain" "$NC"
     printf '  %bPayload Enhanced:%b\n  %bGET / HTTP/1.1[crlf]Host: bug.com[crlf][crlf]PATCH / HTTP/1.1[crlf]Host: %s[crlf]Connection: Upgrade[crlf]Upgrade: websocket[crlf][crlf]%b\n' "$BOLD" "$NC" "$YELLOW" "$domain" "$NC"
     printf '%b--------------------------------------------------------------%b\n' "$CYAN" "$NC"
