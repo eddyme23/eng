@@ -57,3 +57,26 @@ Run `bash ./apply-connection-fixes.sh` after updating to rebuild and restart the
 Silent SSL Direct clients fall back to SSH after 250 ms. Clients that send a prefix immediately do not wait for that timeout; incomplete prefixes have a separate 15-second limit. TLS and WebSocket backend connection attempts are limited to 5 seconds. The WebSocket HTTP header limit is 15 seconds; established sessions have no new idle timeout. WebSocket pings receive matching pongs.
 
 To tune the silent fallback, create `/etc/frimps-v6/tlsmux.env` containing `FRIMPS_TLS_SILENT_TIMEOUT=250ms`. Add `FRIMPS_TLS_LOG_TIMING=true` for diagnostic handshake, classification and backend connection timings, then restart `frimps-v6-tlsmux`. Timing logs are off by default and visible through `journalctl -u frimps-v6-tlsmux`. A shorter fallback can misroute delayed HTTP clients to SSH.
+
+### Optional HTTP Custom HCR trial (Linux amd64)
+
+This is a separate plain HCR listener on TCP 8881, forwarding to OpenSSH 22. It uses existing SSH accounts and does not change eng's shared ports or default installation. Use HTTP Custom v7.10.12 (808) or newer in HCR plain mode, with the direct VPS IPv4 and port 8881; this is not a WebSocket profile.
+
+Upload the developer-supplied `hcr-server` file to `/root/hcr-server`, then run:
+
+```bash
+bash ./hcr-test-install.sh /root/hcr-server
+bash ./hcr-test-audit.sh
+```
+
+The installer verifies the exact supplied binary's SHA-256, checks that the test port is free and OpenSSH is listening, and enables a restricted systemd service. The proprietary binary is not included in this repository. Allow TCP 8881 through your host/provider firewall if required. Defaults remain 6144 bytes per download frame and an 8-second download poll timeout. These settings do not establish an 8-second startup wait. Optional installer settings are `HCR_TEST_PORT`, `HCR_MAX_DOWNLOAD_FRAME` and `HCR_DOWNLOAD_POLL_TIMEOUT`; shared eng ports cannot be used for the trial.
+
+Compare five fresh HCR connections with five WebSocket connections on the same phone network and VPS. Record time to connected, first page load, download performance and failures before changing the defaults. Service checks alone do not verify the HCR protocol or internet access.
+
+To remove the trial (preserving its binary):
+
+```bash
+systemctl disable --now frimps-hcr-test.service
+rm -f /etc/systemd/system/frimps-hcr-test.service
+systemctl daemon-reload
+```
