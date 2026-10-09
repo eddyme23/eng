@@ -35,6 +35,12 @@ if [[ "$mode" == '--live' ]]; then
     check_cmd systemctl is-active --quiet frimps-hcr
     check_listener "$HCR_PORT"
   fi
+  if [[ -s "$state_dir/hcr-tls.env" ]]; then
+    source "$state_dir/hcr-tls.env"
+    check_cmd systemctl is-active --quiet frimps-hcr-tls
+    check_listener "$HCR_TLS_PORT"
+    check_cmd timeout 10 openssl s_client -connect "127.0.0.1:$HCR_TLS_PORT" -servername "$domain" -verify_hostname "$domain" -verify_return_error -CApath /etc/ssl/certs -brief </dev/null
+  fi
   check_cmd openssl s_client -connect "127.0.0.1:443" -servername "$domain" -brief
 
 fi

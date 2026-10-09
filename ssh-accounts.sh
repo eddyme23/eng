@@ -95,6 +95,10 @@ case "$action" in
       source "$state_dir/hcr.env"
       printf '  HCR Plain  : %s:%s (HTTP Custom HCR; same SSH username/password)\n' "$slowdns_ip" "$HCR_PORT"
     fi
+    if [[ -s "$state_dir/hcr-tls.env" ]] && systemctl is-active --quiet frimps-hcr-tls.service; then
+      source "$state_dir/hcr-tls.env"
+      printf '  HCR TLS    : %s:%s (SNI/domain: %s; same SSH username/password)\n' "$slowdns_ip" "$HCR_TLS_PORT" "$domain"
+    fi
     printf '  %bPayload HTTP:%b\n  %bGET / HTTP/1.1[crlf]Host: %s[crlf]Connection: Upgrade[crlf]Upgrade: websocket[crlf][crlf]%b\n\n' "$BOLD" "$NC" "$YELLOW" "$domain" "$NC"
     printf '  %bPayload Enhanced:%b\n  %bGET / HTTP/1.1[crlf]Host: bug.com[crlf][crlf]PATCH / HTTP/1.1[crlf]Host: %s[crlf]Connection: Upgrade[crlf]Upgrade: websocket[crlf][crlf]%b\n' "$BOLD" "$NC" "$YELLOW" "$domain" "$NC"
     printf '%b--------------------------------------------------------------%b\n' "$CYAN" "$NC"

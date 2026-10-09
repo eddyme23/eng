@@ -208,6 +208,7 @@ bash "$script_dir/zivpn-install.sh"
 bash "$script_dir/udp-custom-install.sh"
 bash "$script_dir/socksip-install.sh"
 if [[ ${V6_INSTALL_HCR:-0} == 1 ]]; then bash "$script_dir/hcr-install.sh"; fi
+if [[ ${V6_INSTALL_HCR_TLS:-0} == 1 ]]; then bash "$script_dir/hcr-tls-install.sh"; fi
 
 note 'Enabling every installed Frimps service for this boot and future boots'
 bash "$script_dir/refresh-menu-v6.sh"

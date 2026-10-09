@@ -74,7 +74,7 @@ status_menu() {
   clear
   menu_title 'FRIMPS SERVICE STATUS'
   echo
-  for unit in frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-hcr frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield hysteria1-server hysteria2-server wg-quick@wg0 frimps-slowdns zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip nginx haproxy; do
+  for unit in frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-hcr frimps-hcr-tls frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield hysteria1-server hysteria2-server wg-quick@wg0 frimps-slowdns zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip nginx haproxy; do
     printf '%-42s %s\n' "$unit" "$(systemctl is-active "$unit" 2>/dev/null || true)"
   done
   echo
@@ -223,12 +223,14 @@ maintenance_menu() {
 hcr_menu() {
  while true; do
   clear; menu_title 'HCR SSH TRANSPORT'
-  item 1 'Install HCR plain on port 8881'; item 2 'Status and diagnostics'; item 3 'Restart HCR'; back_item
+  item 1 'Install HCR plain on port 8881'; item 2 'Status and diagnostics'; item 3 'Restart HCR plain'; item 4 'Install HCR TLS on port 8444'; item 5 'Restart HCR TLS'; back_item
   read -r -p '  ► Option: ' x
   case "$x" in
    1) bash "$script_dir/hcr-install.sh"; pause;;
    2) bash "$script_dir/hcr-audit.sh"; pause;;
    3) systemctl restart frimps-hcr.service; pause;;
+   4) load_runtime; bash "$script_dir/hcr-tls-install.sh"; pause;;
+   5) systemctl restart frimps-hcr-tls.service; pause;;
    0) return;; *) echo 'Invalid option.';;
   esac
  done
