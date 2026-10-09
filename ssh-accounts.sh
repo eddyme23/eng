@@ -69,7 +69,14 @@ case "$action" in
   choose-delete)
     mapfile -t names < <(jq -r '.[].name' "$store")
     ((${#names[@]})) || die "no v6-managed SSH accounts"
-    select name in "${names[@]}"; do [[ -n "${name:-}" ]] && exec "$0" delete "$name"; done
+    for index in "${!names[@]}"; do printf '  [%02d] %s\n' "$((index+1))" "${names[$index]}"; done
+    printf '  [00] Back\n'
+    read -r -p '  ► Select account: ' selection || exit 0
+    [[ $selection =~ ^[0-9]{1,9}$ ]] || { echo 'Invalid selection. Returning to SSH menu.'; exit 0; }
+    selection=$((10#$selection))
+    ((selection == 0)) && exit 0
+    ((selection >= 1 && selection <= ${#names[@]})) || { echo 'Invalid selection. Returning to SSH menu.'; exit 0; }
+    exec "$0" delete "${names[$((selection-1))]}"
     ;;
   create|renew|delete|cleanup) ;;
   *) die "action must be create, renew, delete, list, choose-delete, or cleanup" ;;
