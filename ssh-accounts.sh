@@ -41,6 +41,29 @@ slowdns_public_ipv4() {
 commit() { local temp; temp="$(mktemp "$state_dir/.ssh-users.XXXXXX")"; printf '%s\n' "$1" > "$temp"; chmod 600 "$temp"; mv -f "$temp" "$store"; }
 managed() { jq -e --arg name "$1" '.[] | select(.name == $name)' "$store" >/dev/null; }
 
+delete_system_account() {
+  local name="$1" account_uid attempt
+  valid_user "$name" || { echo 'Invalid managed username.' >&2; return 1; }
+  id "$name" >/dev/null 2>&1 || return 0
+  account_uid="$(id -u "$name")" || return 1
+  # Never terminate root or system-account processes, even if metadata is damaged.
+  ((account_uid >= 1000 && account_uid != 65534)) || { echo 'Refusing to delete a system account.' >&2; return 1; }
+  command -v pkill >/dev/null && command -v pgrep >/dev/null || { echo 'procps is required to close account sessions.' >&2; return 1; }
+  # Disable new logins before closing this account's existing sessions.
+  usermod -L "$name" || return 1
+  chage -E 0 "$name" || return 1
+  pkill -TERM -u "$account_uid" 2>/dev/null || true
+  for attempt in {1..20}; do
+    pgrep -u "$account_uid" >/dev/null || break
+    sleep 0.1
+  done
+  if pgrep -u "$account_uid" >/dev/null; then
+    pkill -KILL -u "$account_uid" 2>/dev/null || true
+    sleep 0.1
+  fi
+  userdel -r "$name"
+}
+
 case "$action" in
   list) jq -r '.[] | [.name, .expiresAt] | @tsv' "$store"; exit 0 ;;
   choose-delete)
@@ -55,9 +78,12 @@ esac
 if [[ "$action" == "cleanup" ]]; then
   today="$(date -u +%F)"
   while IFS= read -r expired; do
-    id "$expired" >/dev/null 2>&1 && userdel -r "$expired" || true
+    if delete_system_account "$expired"; then
+      commit "$(jq --arg name "$expired" '[.[] | select(.name != $name)]' "$store")"
+    else
+      echo "Could not delete expired account $expired; retained its managed record." >&2
+    fi
   done < <(jq -r --arg today "$today" '.[] | select(.expiresAt < $today) | .name' "$store")
-  commit "$(jq --arg today "$today" '[.[] | select(.expiresAt >= $today)]' "$store")"
   exit 0
 fi
 
@@ -119,7 +145,7 @@ case "$action" in
     ;;
   delete)
     managed "$user" || die "account is not v6-managed"
-    userdel -r "$user"
+    delete_system_account "$user" || die "could not delete account; its managed record was retained"
     commit "$(jq --arg name "$user" '[.[] | select(.name != $name)]' "$store")"
     ;;
 esac
