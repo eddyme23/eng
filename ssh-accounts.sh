@@ -89,7 +89,7 @@ case "$action" in
     printf '  %bPassword%b   : %b%s%b\n' "$WHITE" "$NC" "$YELLOW" "$password" "$NC"
     printf '  %bExpiry%b     : %b%s%b\n' "$WHITE" "$NC" "$YELLOW" "$expiry" "$NC"
     printf '%b--------------------------------------------------------------%b\n' "$CYAN" "$NC"
-    printf '  SSH Port   : 22, 143\n  Dropbear   : 143 (local)\n  SSL/TLS    : 443\n  SSL/WS     : 443\n  WebSocket  : 80, 8080, 8880, 2082, 2086\n  SlowDNS    : 53/UDP\n  UDP Custom : 50001-65535 (UDP)\n  SocksIP UDP: 1195-3999 (same SSH username/password)\n  UDP Test   : 53000 (IPv4; use this SSH username/password)\n  SocksIP Test: 2000 (IPv4; use this SSH username/password)\n'
+    printf '  SSH Port   : 22, 143\n  Dropbear   : 143 (local)\n  SSL/TLS    : 443\n  SSL/WS     : 443\n  WebSocket  : 80, 8080, 8880, 2082, 2086\n  SlowDNS    : 53/UDP\n  UDP Custom : 50001-65535 (UDP)\n  SocksIP UDP: 1195-3999 (same SSH username/password)\n'
     printf '%b--------------------------------------------------------------%b\n' "$CYAN" "$NC"
     if [[ -s "$state_dir/hcr.env" ]] && systemctl is-active --quiet frimps-hcr.service; then
       source "$state_dir/hcr.env"
