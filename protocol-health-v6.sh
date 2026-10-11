@@ -30,6 +30,11 @@ if [[ "$mode" == '--live' ]]; then
   for port in 443 80 8080 8880 2082 2086; do
     check_listener "$port"
   done
+  if [[ -s "$state_dir/bhttp.env" ]]; then
+    source "$state_dir/bhttp.env"
+    check_cmd systemctl is-active --quiet frimps-bhttp
+    check_listener "$BHTTP_PORT"
+  fi
   if [[ -s "$state_dir/hcr.env" ]]; then
     source "$state_dir/hcr.env"
     check_cmd systemctl is-active --quiet frimps-hcr

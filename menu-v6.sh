@@ -76,7 +76,7 @@ status_menu() {
   clear
   menu_title 'FRIMPS SERVICE STATUS'
   echo
-  for unit in frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-hcr frimps-hcr-tls frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield hysteria1-server hysteria2-server wg-quick@wg0 frimps-slowdns zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip nginx haproxy; do
+  for unit in frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-hcr frimps-hcr-tls frimps-bhttp frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield hysteria1-server hysteria2-server wg-quick@wg0 frimps-slowdns zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip nginx haproxy; do
     printf '%-42s %s\n' "$unit" "$(systemctl is-active "$unit" 2>/dev/null || true)"
   done
   echo
@@ -214,12 +214,27 @@ utilities_menu() {
 maintenance_menu() {
   while true; do
     clear; menu_title 'SERVICE CONTROLS'
-    item 1 'Restart SSH services'; item 2 'Restart UDP services'; item 3 'Restart OpenVPN services'; item 4 'Restart WireGuard'; item 5 'Restart all Frimps services'; item 6 'Create managed-state backup'; item 7 'Remove expired managed accounts'; item 8 'View protocol logs'; item 9 'HCR install / status / restart'; back_item
+    item 1 'Restart SSH services'; item 2 'Restart UDP services'; item 3 'Restart OpenVPN services'; item 4 'Restart WireGuard'; item 5 'Restart all Frimps services'; item 6 'Create managed-state backup'; item 7 'Remove expired managed accounts'; item 8 'View protocol logs'; item 9 'HCR install / status / restart'; item 10 'BHTTP install / status / restart'; back_item
     read -r -p '  ► Option: ' x
     case "$x" in
-      1) bash "$script_dir/maintenance-v6.sh" restart ssh; pause;; 2) bash "$script_dir/maintenance-v6.sh" restart udp; pause;; 3) bash "$script_dir/maintenance-v6.sh" restart openvpn; pause;; 4) bash "$script_dir/maintenance-v6.sh" restart wireguard; pause;; 5) read -r -p 'Restart all managed services? [y/N] ' confirm; [[ "$confirm" =~ ^[Yy]$ ]] && bash "$script_dir/maintenance-v6.sh" restart all; pause;; 6) bash "$script_dir/maintenance-v6.sh" backup; pause;; 7) read -r -p 'Remove expired managed accounts? [y/N] ' confirm; [[ "$confirm" =~ ^[Yy]$ ]] && bash "$script_dir/maintenance-v6.sh" cleanup; pause;; 8) protocol_logs_menu;; 9) hcr_menu;; 0) return;; *) printf '%bInvalid option.%b\n' "$RED" "$NC"; sleep 1;;
+      1) bash "$script_dir/maintenance-v6.sh" restart ssh; pause;; 2) bash "$script_dir/maintenance-v6.sh" restart udp; pause;; 3) bash "$script_dir/maintenance-v6.sh" restart openvpn; pause;; 4) bash "$script_dir/maintenance-v6.sh" restart wireguard; pause;; 5) read -r -p 'Restart all managed services? [y/N] ' confirm; [[ "$confirm" =~ ^[Yy]$ ]] && bash "$script_dir/maintenance-v6.sh" restart all; pause;; 6) bash "$script_dir/maintenance-v6.sh" backup; pause;; 7) read -r -p 'Remove expired managed accounts? [y/N] ' confirm; [[ "$confirm" =~ ^[Yy]$ ]] && bash "$script_dir/maintenance-v6.sh" cleanup; pause;; 8) protocol_logs_menu;; 9) hcr_menu;; 10) bhttp_menu;; 0) return;; *) printf '%bInvalid option.%b\n' "$RED" "$NC"; sleep 1;;
     esac
   done
+}
+
+bhttp_menu() {
+ while true; do
+  clear; menu_title 'BHTTP SSH TRANSPORT'
+  item 1 'Install BHTTP on TCP 8180'; item 2 'Status and diagnostics'; item 3 'Restart BHTTP'; item 4 'View BHTTP logs'; back_item
+  read -r -p '  ► Option: ' x
+  case "$x" in
+   1) bash "$script_dir/bhttp-install.sh"; pause;;
+   2) bash "$script_dir/bhttp-audit.sh"; pause;;
+   3) systemctl restart frimps-bhttp.service; pause;;
+   4) bash "$script_dir/maintenance-v6.sh" logs bhttp; pause;;
+   0) return;; *) echo 'Invalid option.';;
+  esac
+ done
 }
 
 hcr_menu() {
