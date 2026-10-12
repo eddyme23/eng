@@ -19,13 +19,13 @@ bash ./install-frimps.sh
 
 | Service | Public ports / path |
 |---|---|
-| OpenSSH | TCP 22 |
-| SSH payload / SSH WebSocket | TCP 80, 8080, 8880, 2082, 2086 |
-| SSH direct SSL and WebSocket TLS | TCP 443 |
-| OpenVPN HTTP upgrade | TCP 80, 8080, 8880; path `/openvpn` |
-| OpenVPN HTTP upgrade over TLS | TCP 443; path `/openvpn` |
+| OpenSSH | 22 |
+| SSH WebSocket | 80, 8080, 8880, 2082, 2086 |
+| SSH SSL and WebSocket TLS | 443 |
+| OpenVPN Websocket | 80, 8080, 8880; path `/openvpn` |
+| OpenVPN TLS | 443; path `/openvpn` |
 | BHTTP | 8081 |
-| OpenVPN | TCP/UDP 1194; direct SSL TCP 8433 |
+| OpenVPN | TCP/UDP 1194; SSL 8433 |
 | SlowDNS | UDP 53 |
 | Hysteria 2 | UDP 443 |
 | WireGuard | UDP 4000 |
@@ -33,7 +33,7 @@ bash ./install-frimps.sh
 | Hysteria 1 | UDP 20000-50000 |
 | UDP Custom |UDP 50001-65535 |
 | SocksIP | UDP 1195-3999 |
-| BadVPN | Local helper 7300 |
+| BadVPN | 7300 |
 
 
 Menu: `frimps-v6-menu` or `menu`.
