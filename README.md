@@ -35,6 +35,5 @@ bash ./install-frimps.sh
 | SocksIP | UDP 1195-3999 |
 | BadVPN | Local helper 7300 |
 
-HAProxy owns the shared public TCP ports. Nginx uses loopback 9080/9081; Dropbear uses loopback 143. TCP and UDP 443 are separate listeners.
 
 Menu: `frimps-v6-menu` or `menu`.
