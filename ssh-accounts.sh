@@ -128,12 +128,12 @@ case "$action" in
       bhttp_ports="${BHTTP_PORTS:-$BHTTP_PORT}"
       printf '  BHTTP      : %s:%s (BHTTP client)\n' "$slowdns_ip" "${bhttp_ports// /, }"
     fi
-    if [[ -s "$state_dir/hcr.env" ]] || systemctl cat frimps-hcr.service >/dev/null 2>&1 || systemctl cat frimps-hcr-test.service >/dev/null 2>&1; then
+    if [[ -s "$state_dir/hcr.env" ]] || systemctl cat frimps-hcr.service >/dev/null 2>&1; then
       HCR_PORT=8881
       if [[ -s "$state_dir/hcr.env" ]]; then
         source "$state_dir/hcr.env"
       else
-        detected_port="$(systemctl cat frimps-hcr.service frimps-hcr-test.service 2>/dev/null | sed -nE 's/.*--listen :([0-9]+).*/\1/p' | head -n 1)"
+        detected_port="$(systemctl cat frimps-hcr.service 2>/dev/null | sed -nE 's/.*--listen :([0-9]+).*/\1/p' | head -n 1)"
         HCR_PORT="${detected_port:-8881}"
       fi
       printf '  HCR NTLS   : %s:%s (HTTP Custom HCR)\n' "$slowdns_ip" "$HCR_PORT"

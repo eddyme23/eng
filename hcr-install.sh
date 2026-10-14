@@ -10,9 +10,7 @@ if [[ -e /etc/systemd/system/frimps-hcr.service ]]; then
  exit 0
 fi
 tmp_dir=$(mktemp -d)
-migrating=false
-migrate_trial=false
-cleanup() { code=$?; rm -rf -- "$tmp_dir"; if ((code != 0)) && [[ $migrating == true ]]; then systemctl disable --now frimps-hcr.service || true; systemctl enable --now frimps-hcr-test.service || true; fi; }
+cleanup() { rm -rf -- "$tmp_dir"; }
 trap cleanup EXIT
 command -v curl >/dev/null || { echo 'curl is required.' >&2; exit 1; }
 source_binary="$tmp_dir/hcr-server"
@@ -30,16 +28,10 @@ for cmd in ss sha256sum systemctl systemd-analyze install; do command -v "$cmd" 
 [[ -f $source_binary && ! -L $source_binary ]] || { echo "HCR download did not produce a regular binary file." >&2; exit 1; }
 actual_sha=$(sha256sum -- "$source_binary"); actual_sha=${actual_sha%% *}
 [[ $actual_sha == "$expected_sha" ]] || { echo 'Binary checksum differs from the supplied HCR release; installation stopped.' >&2; exit 1; }
-listener=$(ss -H -ltnp "sport = :$port")
-if [[ -n $listener ]]; then
- test_pid=$(systemctl show -p MainPID --value frimps-hcr-test.service 2>/dev/null || true)
- [[ $test_pid =~ ^[1-9][0-9]*$ && $listener == *"pid=$test_pid,"* ]] || { echo "TCP $port is occupied by another service." >&2; exit 1; }
- migrate_trial=true
-fi
+[[ -z $(ss -H -ltn "sport = :$port") ]] || { echo "TCP $port is occupied; no service was changed." >&2; exit 1; }
 [[ -n $(ss -H -ltn 'sport = :22') ]] || { echo 'OpenSSH must be listening on TCP 22.' >&2; exit 1; }
 unit=/etc/systemd/system/frimps-hcr.service
 [[ ! -e $unit ]] || { echo 'HCR is already installed. Use service controls to restart it; no files changed.' >&2; exit 1; }
-if [[ $migrate_trial == true ]]; then migrating=true; systemctl disable --now frimps-hcr-test.service; fi
 install -d -o root -g root -m 700 /opt/frimps-hcr
 install -o root -g root -m 755 "$source_binary" /opt/frimps-hcr/hcr-server
 version=$(/opt/frimps-hcr/hcr-server -version)
@@ -92,6 +84,5 @@ systemctl is-active --quiet frimps-hcr.service || { journalctl -u frimps-hcr -n 
 install -d -m 700 "$state_dir"
 printf 'HCR_PORT=%s\nHCR_MAX_DOWNLOAD_FRAME=%s\nHCR_DOWNLOAD_POLL_TIMEOUT=%s\n' "$port" "$frame" "$poll" > "$state_dir/hcr.env"
 chmod 600 "$state_dir/hcr.env"
-migrating=false
 bash "$script_dir/refresh-menu-v6.sh"
 printf '%s\n' "$version" "HCR plain ready on TCP $port, forwarding to OpenSSH 22." 'Use HTTP Custom HCR plain mode and an existing SSH account.' 'Allow this TCP port through any host or provider firewall if needed.' 'A running service does not yet establish a successful app connection.'

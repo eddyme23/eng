@@ -41,3 +41,5 @@ Menu: `frimps-v6-menu` or `menu`.
 BHTTP now defaults to TCP 90. Existing installations can run `bash ./apply-bhttp-port.sh` to migrate their managed listener and SSH output from 8180 to 90. This restarts BHTTP and disconnects its sessions. The updater checks port availability, backs up its unit/settings and rolls back on update failure. Allow TCP 90 in any host/provider firewall. HCR ports remain 8881 and 8444.
 
 BHTTP now supports TCP 90 and 8180 together. Run `bash ./apply-bhttp-port.sh` on an existing installation. The binary listens on 90; a systemd socket proxy forwards 8180 to the same instance so both ports share session state. Default fresh BHTTP installs configure both. The change disconnects existing BHTTP sessions. Permit both ports in any external firewall.
+
+Only the production HCR installers and services are supported. The obsolete trial installers have been removed. Menu refresh retires the old managed trial unit once production HCR is active; account output uses only production settings. There are no separate trial users: HCR uses the same SSH accounts.
