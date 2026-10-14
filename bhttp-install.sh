@@ -7,11 +7,11 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 state_dir="${V6_STATE_DIR:-/etc/frimps-v6}"
 unit=/etc/systemd/system/frimps-bhttp.service
 [[ ! -e $unit ]] || { echo 'BHTTP is already installed. Use its menu controls for status or restart.'; exit 0; }
-port="${BHTTP_PORT:-8180}"
+port="${BHTTP_PORT:-90}"
 sessions="${BHTTP_MAX_SESSIONS:-128}"
-[[ $port =~ ^[0-9]{1,5}$ ]] && ((10#$port >= 1024 && 10#$port <= 65535)) || { echo 'Choose a port from 1024 to 65535.' >&2; exit 1; }
+[[ $port =~ ^[0-9]{1,5}$ ]] && ((10#$port >= 1 && 10#$port <= 65535)) || { echo 'Choose a port from 1 to 65535.' >&2; exit 1; }
 port=$((10#$port))
-case "$port" in 8080|8880|2082|2086|8881|8444) echo 'Choose a separate port from eng and HCR listeners.' >&2; exit 1;; esac
+case "$port" in 22|53|80|443|1194|8433|8080|8880|2082|2086|8881|8444) echo 'Choose a separate port from eng and HCR listeners.' >&2; exit 1;; esac
 [[ $sessions =~ ^[1-9][0-9]{0,3}$ ]] && ((sessions <= 1024)) || { echo 'Maximum sessions must be from 1 to 1024.' >&2; exit 1; }
 for cmd in curl sha256sum ss systemctl systemd-analyze install; do command -v "$cmd" >/dev/null || { echo "Missing command: $cmd" >&2; exit 1; }; done
 [[ -z $(ss -H -ltn "sport = :$port") ]] || { echo "TCP $port is occupied; no service was changed." >&2; exit 1; }
@@ -44,7 +44,8 @@ RestartSec=5s
 TimeoutStopSec=15s
 UMask=0077
 NoNewPrivileges=true
-CapabilityBoundingSet=
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 AmbientCapabilities=
 PrivateTmp=true
 PrivateDevices=true

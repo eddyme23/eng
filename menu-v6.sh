@@ -225,7 +225,7 @@ maintenance_menu() {
 bhttp_menu() {
  while true; do
   clear; menu_title 'BHTTP SSH TRANSPORT'
-  item 1 'Install BHTTP on TCP 8180'; item 2 'Status and diagnostics'; item 3 'Restart BHTTP'; item 4 'View BHTTP logs'; back_item
+  item 1 'Install BHTTP on TCP 90'; item 2 'Status and diagnostics'; item 3 'Restart BHTTP'; item 4 'View BHTTP logs'; back_item
   read -r -p '  ► Option: ' x
   case "$x" in
    1) bash "$script_dir/bhttp-install.sh"; pause;;
