@@ -128,12 +128,24 @@ case "$action" in
       bhttp_ports="${BHTTP_PORTS:-$BHTTP_PORT}"
       printf '  BHTTP      : %s:%s (BHTTP client)\n' "$slowdns_ip" "${bhttp_ports// /, }"
     fi
-    if [[ -s "$state_dir/hcr.env" ]] && systemctl is-active --quiet frimps-hcr.service; then
-      source "$state_dir/hcr.env"
+    if [[ -s "$state_dir/hcr.env" ]] || systemctl cat frimps-hcr.service >/dev/null 2>&1 || systemctl cat frimps-hcr-test.service >/dev/null 2>&1; then
+      HCR_PORT=8881
+      if [[ -s "$state_dir/hcr.env" ]]; then
+        source "$state_dir/hcr.env"
+      else
+        detected_port="$(systemctl cat frimps-hcr.service frimps-hcr-test.service 2>/dev/null | sed -nE 's/.*--listen :([0-9]+).*/\1/p' | head -n 1)"
+        HCR_PORT="${detected_port:-8881}"
+      fi
       printf '  HCR NTLS   : %s:%s (HTTP Custom HCR)\n' "$slowdns_ip" "$HCR_PORT"
     fi
-    if [[ -s "$state_dir/hcr-tls.env" ]] && systemctl is-active --quiet frimps-hcr-tls.service; then
-      source "$state_dir/hcr-tls.env"
+    if [[ -s "$state_dir/hcr-tls.env" ]] || systemctl cat frimps-hcr-tls.service >/dev/null 2>&1; then
+      HCR_TLS_PORT=8444
+      if [[ -s "$state_dir/hcr-tls.env" ]]; then
+        source "$state_dir/hcr-tls.env"
+      else
+        detected_port="$(systemctl cat frimps-hcr-tls.service 2>/dev/null | sed -nE 's/.*--listen :([0-9]+).*/\1/p' | head -n 1)"
+        HCR_TLS_PORT="${detected_port:-8444}"
+      fi
       printf '  HCR TLS    : %s:%s (HTTP Custom HCR)\n' "$domain" "$HCR_TLS_PORT"
     fi
     printf '%b--------------------------------------------------------------%b\n' "$CYAN" "$NC"
