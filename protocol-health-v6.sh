@@ -17,7 +17,12 @@ check_listener() {
 [[ "${EUID}" -eq 0 ]] || { echo 'Run as root.' >&2; exit 1; }
 case "$mode" in --staged|--live) ;; *) echo 'Use --staged or --live.' >&2; exit 1 ;; esac
 
-if "$script_dir/validate-v6.sh" >/dev/null 2>&1; then pass 'v6 generated-state validation'; else fail 'v6 generated-state validation'; fi
+if validation_output="$(bash "$script_dir/validate-v6.sh" 2>&1)"; then
+  pass 'v6 generated-state validation'
+else
+  fail 'v6 generated-state validation'
+  printf '%s\n' "$validation_output"
+fi
 for file in backends.json haproxy-443.cfg nginx-main-tls.conf nginx-plain.conf nginx-ssh-only.conf tlsmux.service payloadgate.service; do
   [[ -s "$state_dir/$file" ]] && pass "$file exists" || fail "$file exists"
 done
@@ -47,7 +52,7 @@ if [[ "$mode" == '--live' ]]; then
     check_listener "$HCR_TLS_PORT"
     check_cmd timeout 10 openssl s_client -connect "127.0.0.1:$HCR_TLS_PORT" -servername "$domain" -verify_hostname "$domain" -verify_return_error -CApath /etc/ssl/certs -brief </dev/null
   fi
-  check_cmd openssl s_client -connect "127.0.0.1:443" -servername "$domain" -brief
+  check_cmd timeout 10 openssl s_client -connect "127.0.0.1:443" -servername "$domain" -brief </dev/null
 
 fi
 
