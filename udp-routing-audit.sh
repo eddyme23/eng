@@ -17,8 +17,11 @@ cat <<'EOF'
 50001-65535       UDP Custom
 EOF
 echo
-echo '[UDP listeners]'
-ss -lunp || true
+echo '[dedicated UDP listeners]'
+# Filter in ss itself: BadVPN creates many ephemeral outbound UDP sockets.
+ss -lunp '( sport = :53 or sport = :443 or sport = :1194 or sport = :4000 or sport = :5667 or sport = :36712 or sport = :36717 )' || true
+echo '[BadVPN UDP socket count, including outbound sockets]'
+ss -Hunp 2>/dev/null | awk '/badvpn-udpgw/ {n++} END {print n+0}' || true
 echo
 echo '[nftables rules mentioning UDP, DNAT, or redirect]'
 if command -v nft >/dev/null 2>&1; then
