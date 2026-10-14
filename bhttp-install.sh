@@ -75,5 +75,5 @@ systemctl is-active --quiet frimps-bhttp.service || { journalctl -u frimps-bhttp
 install -d -m 700 "$state_dir"
 printf 'BHTTP_PORT=%s\nBHTTP_MAX_SESSIONS=%s\n' "$port" "$sessions" > "$state_dir/bhttp.env"
 chmod 600 "$state_dir/bhttp.env"
-bash "$script_dir/refresh-menu-v6.sh"
+if [[ $port == 90 ]]; then bash "$script_dir/apply-bhttp-port.sh"; else bash "$script_dir/refresh-menu-v6.sh"; fi
 printf '%s\n' "BHTTP ready on TCP $port, forwarding to OpenSSH 22." 'Use a BHTTP-compatible client and an existing SSH account.' 'Allow this TCP port through any host or provider firewall if needed.' 'A running service does not yet establish a successful app connection.'

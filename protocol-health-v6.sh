@@ -33,7 +33,8 @@ if [[ "$mode" == '--live' ]]; then
   if [[ -s "$state_dir/bhttp.env" ]]; then
     source "$state_dir/bhttp.env"
     check_cmd systemctl is-active --quiet frimps-bhttp
-    check_listener "$BHTTP_PORT"
+    for bhttp_port in ${BHTTP_PORTS:-$BHTTP_PORT}; do check_listener "$bhttp_port"; done
+    if [[ -n ${BHTTP_PORTS:-} ]]; then check_cmd systemctl is-active --quiet frimps-bhttp-alt.socket; fi
   fi
   if [[ -s "$state_dir/hcr.env" ]]; then
     source "$state_dir/hcr.env"
