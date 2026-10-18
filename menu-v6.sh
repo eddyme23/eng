@@ -215,7 +215,8 @@ maintenance_menu() {
   while true; do
     clear; menu_title 'SERVICE CONTROLS'
     item 1 'Restart SSH services'; item 2 'Restart UDP services'; item 3 'Restart OpenVPN services'; item 4 'Restart WireGuard'; item 5 'Restart all Frimps services'; item 6 'Create managed-state backup'; item 7 'Remove expired managed accounts'; item 8 'View protocol logs'; item 9 'HCR install / status / restart'; item 10 'BHTTP install / status / restart'; back_item
-    read -r -p '  ► Option: ' x
+    read -r -p '  ► Option: ' x || return
+    x="${x#0}"
     case "$x" in
       1) bash "$script_dir/maintenance-v6.sh" restart ssh; pause;; 2) bash "$script_dir/maintenance-v6.sh" restart udp; pause;; 3) bash "$script_dir/maintenance-v6.sh" restart openvpn; pause;; 4) bash "$script_dir/maintenance-v6.sh" restart wireguard; pause;; 5) read -r -p 'Restart all managed services? [y/N] ' confirm; [[ "$confirm" =~ ^[Yy]$ ]] && bash "$script_dir/maintenance-v6.sh" restart all; pause;; 6) bash "$script_dir/maintenance-v6.sh" backup; pause;; 7) read -r -p 'Remove expired managed accounts? [y/N] ' confirm; [[ "$confirm" =~ ^[Yy]$ ]] && bash "$script_dir/maintenance-v6.sh" cleanup; pause;; 8) protocol_logs_menu;; 9) hcr_menu;; 10) bhttp_menu;; 0) return;; *) printf '%bInvalid option.%b\n' "$RED" "$NC"; sleep 1;;
     esac
@@ -226,11 +227,12 @@ bhttp_menu() {
  while true; do
   clear; menu_title 'BHTTP SSH TRANSPORT'
   item 1 'Install BHTTP on TCP 90 / 8180'; item 2 'Status and diagnostics'; item 3 'Restart BHTTP'; item 4 'View BHTTP logs'; back_item
-  read -r -p '  ► Option: ' x
+  read -r -p '  ► Option: ' x || return
+  x="${x#0}"
   case "$x" in
    1) bash "$script_dir/bhttp-install.sh"; pause;;
    2) bash "$script_dir/bhttp-audit.sh"; pause;;
-   3) systemctl restart frimps-bhttp.service; pause;;
+   3) bash "$script_dir/restart-bhttp.sh"; pause;;
    4) bash "$script_dir/maintenance-v6.sh" logs bhttp; pause;;
    0) return;; *) echo 'Invalid option.';;
   esac
@@ -241,13 +243,14 @@ hcr_menu() {
  while true; do
   clear; menu_title 'HCR SSH TRANSPORT'
   item 1 'Install HCR plain on port 8881'; item 2 'Status and diagnostics'; item 3 'Restart HCR plain'; item 4 'Install HCR TLS on port 8444'; item 5 'Restart HCR TLS'; back_item
-  read -r -p '  ► Option: ' x
+  read -r -p '  ► Option: ' x || return
+  x="${x#0}"
   case "$x" in
    1) bash "$script_dir/hcr-install.sh"; pause;;
    2) bash "$script_dir/hcr-audit.sh"; pause;;
-   3) systemctl restart frimps-hcr.service; pause;;
+   3) bash "$script_dir/maintenance-v6.sh" restart hcr; pause;;
    4) load_runtime; bash "$script_dir/hcr-tls-install.sh"; pause;;
-   5) systemctl restart frimps-hcr-tls.service; pause;;
+   5) bash "$script_dir/maintenance-v6.sh" restart hcrtls; pause;;
    0) return;; *) echo 'Invalid option.';;
   esac
  done

@@ -6,3 +6,5 @@ systemctl show frimps-bhttp.service -p ExecStart --no-pager || true
 ss -ltnp | grep -E 'bhttp-server|:8180[[:space:]]|:22[[:space:]]' || true
 ss -tnp | grep bhttp-server || true
 journalctl -u frimps-bhttp.service -n 60 --no-pager || true
+
+echo 'The alternate-port proxy service can be inactive until a client connects; its socket must be active.'

@@ -37,3 +37,5 @@ bash ./install-frimps.sh
 
 
 Menu: `frimps-v6-menu` or `menu`.
+
+BHTTP restarts now stop the alternate-port socket and its active proxy together before restarting the backend and reopening the socket. This avoids rebinding port 8180 while the proxy still holds it. Apply with `bash ./refresh-menu-v6.sh`, then `bash ./restart-bhttp.sh`. Service controls 9 (HCR) and 10 (BHTTP) use the maintained restart actions; their submenus accept padded option numbers. A socket-activated proxy may be inactive before the first client connection.
