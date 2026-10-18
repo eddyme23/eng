@@ -65,7 +65,7 @@ logs() {
   case "${1:-}" in
     ssh) unit='frimps-v6-sshws.service' ;;
     openvpn) unit='frimps-openvpn-gateway.service frimps-openvpn-stunnel.service frimps-openvpn-bshield.service' ;;
-    bhttp) unit='frimps-bhttp.service' ;;
+    bhttp) unit='frimps-bhttp.service frimps-bhttp-alt.socket frimps-bhttp-alt.service' ;;
     hcr) unit='frimps-hcr.service frimps-hcr-tls.service' ;;
     socksip) unit='frimps-socksip.service' ;;
     hysteria1) unit='hysteria1-server.service' ;;
