@@ -87,3 +87,16 @@ current-boot authentication events, complete firewall rules and host HTTPS acces
 The local probe uses an intentionally invalid tunnel name; a DNS error response
 is expected and does not establish an encrypted client session. A UDP 53 exception
 in the Frimps NAT table alone does not prove other NAT/filter tables permit traffic.
+
+France's SlowDNS audit identified a legacy `1:65535 -> :36717` DNAT outside the
+managed table. `bash ./apply-legacy-udp-fix.sh` backs up firewall rules and removes
+only the matching legacy rules after native replacement tables exist. It updates
+the boot migration helper; it does not flush firewall tables. Reconnect clients
+to create new UDP flows after the change.
+For confirmed `requester payload size 512 is too small (minimum 1232)` messages,
+`bash ./apply-slowdns-mtu.sh 512` provides an optional response-size compatibility
+trial. It restarts only SlowDNS, preserving DNS keys/accounts, and may reduce
+throughput. Restore the default with `bash ./apply-slowdns-mtu.sh 1232`.
+The fresh-install default remains 1232; an explicitly selected size survives a
+SlowDNS reinstall. These errors alone do not identify which client's resolver
+path is affected, and a smaller response size is not a confirmed browsing fix.

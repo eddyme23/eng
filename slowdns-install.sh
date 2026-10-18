@@ -29,7 +29,9 @@ Wants=network-online.target
 After=network-online.target ssh.service frimps-v6-udp-routing.service
 Requires=ssh.service frimps-v6-udp-routing.service
 [Service]
-ExecStart=/etc/slowdns/sldns-server -udp $listen_ip:53 -privkey-file /etc/slowdns/server.key $ns 127.0.0.1:22
+Environment=FRIMPS_SLOWDNS_MTU=1232
+EnvironmentFile=-$state_dir/slowdns.env
+ExecStart=/etc/slowdns/sldns-server -mtu \${FRIMPS_SLOWDNS_MTU} -udp $listen_ip:53 -privkey-file /etc/slowdns/server.key $ns 127.0.0.1:22
 Restart=on-failure
 RestartSec=2
 LimitNOFILE=524288

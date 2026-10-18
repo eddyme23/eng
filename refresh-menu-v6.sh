@@ -13,6 +13,9 @@ install -m 755 "$script_dir"/*.sh "$runtime_dir/"
 # Keep the helpers that are direct script copies in sync during a live refresh;
 # otherwise a refreshed menu can still apply obsolete routing or render logic.
 install -d -m 755 "$helper_dir"
+if [[ -f /etc/systemd/system/frimps-firewall-migration.service ]]; then
+  install -m 700 "$script_dir/retire-iptables-rules.sh" "$helper_dir/frimps-retire-iptables-rules"
+fi
 if [[ -f /etc/systemd/system/frimps-socksip-network.service ]]; then
   install -m 700 "$script_dir/socksip-network.sh" "$helper_dir/frimps-socksip-network"
 fi

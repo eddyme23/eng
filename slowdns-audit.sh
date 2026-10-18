@@ -41,6 +41,10 @@ timeout 5 /usr/sbin/sshd -T -C user=frimps-audit,host=localhost,addr=127.0.0.1,l
 if command -v nft >/dev/null; then
   policy="$(nft list table ip frimps_v6_udp 2>/dev/null)"
   if [[ $policy == *'53, 443, 1194, 4000'* ]]; then echo '[OK] Frimps NAT table reserves UDP 53 (other tables/filter chains still require inspection)'; else echo '[FAIL] UDP 53 reservation missing from managed routing policy' >&2; failed=1; fi
+  if nft list ruleset 2>/dev/null | grep -Eq 'udp dport 1-65535 .*dnat to :36717'; then
+    echo '[FAIL] A legacy all-port UDP-Custom DNAT can steal UDP 53; run apply-legacy-udp-fix.sh' >&2
+    failed=1
+  fi
 fi
 if [[ ${1:-} != --local ]]; then
   if [[ -r "$state_dir/service-options.env" ]]; then source "$state_dir/service-options.env"; fi

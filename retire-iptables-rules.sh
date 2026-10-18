@@ -8,6 +8,14 @@ iface="${V6_PUBLIC_INTERFACE:-$(ip -4 route show default | awk '/default/ {print
 # Native replacement must be installed before legacy UDP ingress is retired.
 nft list table ip frimps_v6_udp >/dev/null
 nft list table ip frimps_socksip >/dev/null
+# France audit exposed this older upstream catch-all outside V6_UDP_INGRESS.
+# Delete only the exact backend/range/interface after native replacement exists.
+for tool in iptables iptables-legacy ip6tables ip6tables-legacy; do
+ command -v "$tool" >/dev/null 2>&1 || continue
+ while "$tool" -t nat -C PREROUTING -i "$iface" -p udp --dport 1:65535 -j DNAT --to-destination :36717 2>/dev/null; do
+  "$tool" -t nat -D PREROUTING -i "$iface" -p udp --dport 1:65535 -j DNAT --to-destination :36717
+ done
+done
 for tool in iptables iptables-legacy; do
  command -v "$tool" >/dev/null 2>&1 || continue
  del() { local table="$1"; shift; while "$tool" -t "$table" -C "$@" 2>/dev/null; do "$tool" -t "$table" -D "$@"; done; }

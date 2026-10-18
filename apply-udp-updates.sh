@@ -31,7 +31,7 @@ install -m 700 "$script_dir/retire-iptables-rules.sh" /usr/local/libexec/frimps-
 cat >/etc/systemd/system/frimps-firewall-migration.service <<'EOF'
 [Unit]
 Description=Retire prior Frimps iptables rules after native nftables setup
-After=netfilter-persistent.service frimps-v6-udp-routing.service frimps-socksip-network.service frimps-v6-wireguard-nat.service
+After=netfilter-persistent.service frimps-v6-udp-routing.service frimps-socksip-network.service frimps-v6-wireguard-nat.service frimps-udp-custom.service
 Requires=frimps-v6-udp-routing.service frimps-socksip-network.service
 [Service]
 Type=oneshot
