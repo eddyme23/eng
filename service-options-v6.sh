@@ -33,7 +33,9 @@ ask() {
 
 echo '═══ FRIMPS LINK AND SERVICE OPTIONS ═══'
 echo
+echo 'Enter 0 or 00 at the domain prompt to go back.'
 read -r -e -p "Primary domain (must remain $current_domain because the current certificate is bound to it): " -i "$current_domain" domain
+[[ "$domain" == 0 || "$domain" == 00 ]] && exit 0
 domain="${domain:-$current_domain}"
 valid_hostname "$domain" || die 'invalid domain'
 [[ "$domain" == "$current_domain" ]] || die 'domain migration requires a matching certificate and an explicit install-v6.sh run; no change was made'

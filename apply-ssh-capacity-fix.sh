@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Optional reversible backend test. Administrative SSH configuration is untouched.
+# Optional reversible backend setup. Administrative SSH configuration is untouched.
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo 'Run as root.' >&2; exit 1; }
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -111,7 +111,7 @@ for unit in $units; do
  [[ $exec_line == *'-ssh-target 127.0.0.1:143'* ]] || { echo "Unexpected backend in $unit" >&2; false; }
  exec_line="${exec_line/-ssh-target 127.0.0.1:143/-ssh-target 127.0.0.1:2222}"
  install -d -m 755 "/etc/systemd/system/$unit.service.d"
- printf '# Frimps managed SSH capacity backend\n[Service]\nExecStart=\n%s\n' "$exec_line" > "/etc/systemd/system/$unit.service.d/80-frimps-ssh-backend.conf"
+ printf '# Frimps managed SSH capacity backend\n[Unit]\nAfter=frimps-v6-ssh-backend.service\nRequires=frimps-v6-ssh-backend.service\n[Service]\nExecStart=\n%s\n' "$exec_line" > "/etc/systemd/system/$unit.service.d/80-frimps-ssh-backend.conf"
 done
 printf 'SSH_BACKEND_TARGET=127.0.0.1:2222\n' > "$state_dir/ssh-capacity.env"
 chmod 600 "$state_dir/ssh-capacity.env"

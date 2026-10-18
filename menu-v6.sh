@@ -20,6 +20,13 @@ fi
 line() { printf '%b══════════════════════════════════════════════════════════════%b\n' "$CYAN" "$NC"; }
 menu_title() { line; printf '                 %b%s%b\n' "$BOLD" "$1" "$NC"; line; }
 item() { printf '  [%b%02d%b] %s\n' "$YELLOW" "$1" "$NC" "$2"; }
+# Normalize displayed two-digit choices without Bash octal interpretation.
+read_menu_option() {
+  local value
+  read -r -p "$2" value || return 1
+  if [[ $value =~ ^[0-9]{1,9}$ ]]; then value=$((10#$value)); fi
+  printf -v "$1" '%s' "$value"
+}
 back_item() { printf '  [%b00%b] Back\n' "$YELLOW" "$NC"; }
 port_row() { printf '  %b• %-12s%b %b%-22s%b %b• %-14s%b %b%s%b\n' "$WHITE" "$1" "$NC" "$GREEN" "$2" "$NC" "$WHITE" "$3" "$NC" "$GREEN" "$4" "$NC"; }
 pause() { echo; read -r -p 'Press Enter to continue... ' _; }
@@ -27,7 +34,7 @@ ask_account() { read -r -p 'Username: ' account; read -r -p 'Validity (days): ' 
 primary_domain() { jq -r '.primaryDomain' "$state_dir/routes.json"; }
 load_service_options() { [[ -r "$state_dir/service-options.env" ]] && source "$state_dir/service-options.env"; }
 load_runtime() { [[ -r "$state_dir/runtime.env" ]] && source "$state_dir/runtime.env"; export V6_CERT_FILE="${V6_CERT_FILE:-${V6_STORED_CERT_FILE:-}}" V6_KEY_FILE="${V6_KEY_FILE:-${V6_STORED_KEY_FILE:-}}"; }
-pick_account_store() { local store="$1" field="${2:-name}" label="${3:-Account}" i; mapfile -t names < <(jq -r ".[] | .$field" "$store" 2>/dev/null); ((${#names[@]})) || { echo "No $label accounts found."; return 1; }; menu_title "SELECT $label ACCOUNT"; for i in "${!names[@]}"; do item "$((i+1))" "${names[$i]}"; done; back_item; read -r -p '  ► Select account: ' i; [[ "$i" =~ ^[0-9]+$ ]] && ((i>0 && i<=${#names[@]})) || return 1; account="${names[$((i-1))]}"; }
+pick_account_store() { local store="$1" field="${2:-name}" label="${3:-Account}" i; mapfile -t names < <(jq -r ".[] | .$field" "$store" 2>/dev/null); ((${#names[@]})) || { echo "No $label accounts found."; return 1; }; menu_title "SELECT $label ACCOUNT"; for i in "${!names[@]}"; do item "$((i+1))" "${names[$i]}"; done; back_item; read_menu_option i '  ► Select account: ' || return 1; [[ "$i" =~ ^[0-9]{1,9}$ ]] && ((i>0 && i<=${#names[@]})) || return 1; account="${names[$((i-1))]}"; }
 
 show_ports() {
   local server_ip os_name arch cores now ram cpu buffer idle idle2 total total2 work
@@ -76,8 +83,8 @@ status_menu() {
   clear
   menu_title 'FRIMPS SERVICE STATUS'
   echo
-  for unit in frimps-v6-ssh-backend frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-hcr frimps-hcr-tls frimps-bhttp frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield hysteria1-server hysteria2-server wg-quick@wg0 frimps-slowdns zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip nginx haproxy; do
-    printf '%-42s %s\n' "$unit" "$(systemctl is-active "$unit" 2>/dev/null || true)"
+  for unit in ssh cron certbot.timer frimps-account-cleanup.timer frimps-bhttp-alt.socket frimps-v6-ssh-backend frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-hcr frimps-hcr-tls frimps-bhttp frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield hysteria1-server hysteria2-server wg-quick@wg0 frimps-slowdns zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip nginx haproxy; do
+    printf '%-36s %-12s %s\n' "$unit" "$(systemctl is-active "$unit" 2>/dev/null || true)" "$(systemctl is-enabled "$unit" 2>/dev/null || true)"
   done
   echo
   ss -ltn '( sport = :22 or sport = :80 or sport = :443 or sport = :8080 or sport = :8880 or sport = :2082 or sport = :2086 )' 2>/dev/null || true
@@ -102,7 +109,7 @@ wireguard_menu() {
   while true; do
     clear; menu_title 'WIREGUARD ACCOUNT MANAGEMENT'
     item 1 'Create WireGuard account'; item 2 'Renew WireGuard account'; item 3 'Delete WireGuard account'; item 4 'List WireGuard accounts'; item 5 'Show WireGuard link'; item 6 'Show WireGuard client config'; item 7 'Remove expired accounts'; back_item
-    read -r -p '  ► Option: ' x
+    read_menu_option x '  ► Option: ' || return
     case "$x" in
       1) ask_account; bash "$script_dir/wireguard-accounts.sh" create "$account" "$validity"; pause ;;
       2) pick_account_store "$state_dir/wireguard-users.json" name WireGuard && { read -r -p 'Validity (days): ' validity; bash "$script_dir/wireguard-accounts.sh" renew "$account" "$validity"; }; pause ;;
@@ -120,7 +127,7 @@ openvpn_menu() {
   while true; do
     clear; menu_title 'OPENVPN ACCOUNT MANAGEMENT'
     item 1 'Create OpenVPN account'; item 2 'Renew OpenVPN account'; item 3 'Reset OpenVPN password'; item 4 'Delete OpenVPN account'; item 5 'List OpenVPN accounts'; item 6 'Show generator details'; item 7 'Show generic .ovpn profile'; item 8 'Remove expired OpenVPN accounts'; back_item
-    read -r -p '  ► Option: ' x
+    read_menu_option x '  ► Option: ' || return
     case "$x" in
       1) ask_account; V6_DOMAIN="$(primary_domain)" bash "$script_dir/openvpn-accounts.sh" create "$account" "$validity"; pause ;;
       2) pick_account_store "$state_dir/openvpn-users.json" name OpenVPN && { read -r -p 'Validity (days): ' validity; bash "$script_dir/openvpn-accounts.sh" renew "$account" "$validity"; }; pause ;;
@@ -144,7 +151,7 @@ hysteria1_menu() {
     item 4 'List Hysteria 1 accounts'
     item 5 'Edit Hysteria 1 speeds'
     back_item
-    read -r -p '  ► Option: ' x
+    read_menu_option x '  ► Option: ' || return
     case "$x" in
       1) ask_account; load_service_options; read -r -p 'Account password (Enter for generated password): ' password; V6_DOMAIN="$(primary_domain)" bash "$script_dir/hysteria1-accounts.sh" create "$account" "$validity" "${password:-$(openssl rand -hex 12)}"; unset password; pause ;;
       2) ask_account; bash "$script_dir/hysteria1-accounts.sh" renew "$account" "$validity"; pause ;;
@@ -161,7 +168,7 @@ hysteria2_menu() {
   while true; do
     clear; menu_title 'HYSTERIA 2 ACCOUNT MANAGEMENT'
     item 1 'Create Hysteria 2 account'; item 2 'Renew Hysteria 2 account'; item 3 'Delete Hysteria 2 account'; item 4 'List Hysteria 2 accounts'; item 5 'Show Hysteria 2 link'; back_item
-    read -r -p '  ► Option: ' x
+    read_menu_option x '  ► Option: ' || return
     case "$x" in
       1) ask_account; load_service_options; V6_DOMAIN="$(primary_domain)" bash "$script_dir/hysteria2-accounts.sh" create "$account" "$validity"; pause ;;
       2) pick_account_store "$state_dir/hysteria2-users.json" name 'Hysteria 2' && { read -r -p 'Validity (days): ' validity; bash "$script_dir/hysteria2-accounts.sh" renew "$account" "$validity"; }; pause ;;
@@ -190,7 +197,7 @@ zivpn_menu() {
     item 3 'Delete account'
     item 4 'List accounts'
     back_item
-    read -r -p '  ► Option: ' x
+    read_menu_option x '  ► Option: ' || return
     case "$x" in
       1) read -r -p 'Password / username: ' account; read -r -p 'Validity (days): ' validity; V6_DOMAIN="$(primary_domain)" bash "$script_dir/zivpn-accounts.sh" create "$account" "$validity"; pause ;;
       2) pick_account_store "$state_dir/zivpn-users.json" password ZiVPN && { read -r -p 'Validity (days): ' validity; V6_DOMAIN="$(primary_domain)" bash "$script_dir/zivpn-accounts.sh" renew "$account" "$validity"; }; pause ;;
@@ -207,7 +214,7 @@ utilities_menu() {
   while true; do
     clear; menu_title 'SYSTEM UTILITIES'
     item 1 'BBR status'; item 2 'Enable native kernel BBR'; item 3 'Netflix / streaming region check'; back_item
-    read -r -p '  ► Option: ' x
+    read_menu_option x '  ► Option: ' || return
     case "$x" in 1) bash "$script_dir/utilities-v6.sh" status; pause;; 2) bash "$script_dir/utilities-v6.sh" enable-bbr; pause;; 3) bash "$script_dir/utilities-v6.sh" netflix; pause;; 0) return;; *) printf '%bInvalid option.%b\n' "$RED" "$NC"; sleep 1;; esac
   done
 }
@@ -215,8 +222,7 @@ maintenance_menu() {
   while true; do
     clear; menu_title 'SERVICE CONTROLS'
     item 1 'Restart SSH services'; item 2 'Restart UDP services'; item 3 'Restart OpenVPN services'; item 4 'Restart WireGuard'; item 5 'Restart all Frimps services'; item 6 'Create managed-state backup'; item 7 'Remove expired managed accounts'; item 8 'View protocol logs'; back_item
-    read -r -p '  ► Option: ' x || return
-    x="${x#0}"
+    read_menu_option x '  ► Option: ' || return
     case "$x" in
       1) bash "$script_dir/maintenance-v6.sh" restart ssh; pause;; 2) bash "$script_dir/maintenance-v6.sh" restart udp; pause;; 3) bash "$script_dir/maintenance-v6.sh" restart openvpn; pause;; 4) bash "$script_dir/maintenance-v6.sh" restart wireguard; pause;; 5) read -r -p 'Restart all managed services? [y/N] ' confirm; [[ "$confirm" =~ ^[Yy]$ ]] && bash "$script_dir/maintenance-v6.sh" restart all; pause;; 6) bash "$script_dir/maintenance-v6.sh" backup; pause;; 7) read -r -p 'Remove expired managed accounts? [y/N] ' confirm; [[ "$confirm" =~ ^[Yy]$ ]] && bash "$script_dir/maintenance-v6.sh" cleanup; pause;; 8) protocol_logs_menu;; 0) return;; *) printf '%bInvalid option.%b\n' "$RED" "$NC"; sleep 1;;
     esac
@@ -227,8 +233,7 @@ protocol_logs_menu() {
   while true; do
     clear; menu_title 'PROTOCOL LOGS (LAST 100 LINES)'
     item 1 'SSH bridge'; item 2 'OpenVPN transports'; item 3 'Hysteria 1'; item 4 'Hysteria 2'; item 5 'WireGuard'; item 6 'ZiVPN'; item 7 'SlowDNS'; item 8 'UDP Custom / BadVPN'; item 9 'SocksIP UDP'; item 10 'HCR NTLS / TLS'; item 11 'BHTTP'; back_item
-    read -r -p '  ► Option: ' x || return
-    x="${x#0}"
+    read_menu_option x '  ► Option: ' || return
     case "$x" in
       1) bash "$script_dir/maintenance-v6.sh" logs ssh; pause;; 2) bash "$script_dir/maintenance-v6.sh" logs openvpn; pause;; 3) bash "$script_dir/maintenance-v6.sh" logs hysteria1; pause;; 4) bash "$script_dir/maintenance-v6.sh" logs hysteria2; pause;; 5) bash "$script_dir/maintenance-v6.sh" logs wireguard; pause;; 6) bash "$script_dir/maintenance-v6.sh" logs zivpn; pause;; 7) bash "$script_dir/maintenance-v6.sh" logs slowdns; pause;; 8) bash "$script_dir/maintenance-v6.sh" logs udpcustom; pause;; 9) bash "$script_dir/maintenance-v6.sh" logs socksip; pause;; 10) bash "$script_dir/maintenance-v6.sh" logs hcr; pause;; 11) bash "$script_dir/maintenance-v6.sh" logs bhttp; pause;; 0) return;; *) printf '%bInvalid option.%b\n' "$RED" "$NC"; sleep 1;;
     esac
@@ -238,7 +243,7 @@ protocol_logs_menu() {
 ssh_menu() {
   while true; do
     clear; menu_title 'SSH ACCOUNT MANAGEMENT'; item 1 'Create SSH account'; item 2 'Renew SSH account'; item 3 'Delete SSH account'; item 4 'List SSH accounts'; back_item
-    read -r -p '  ► Option: ' x
+    read_menu_option x '  ► Option: ' || return
     case "$x" in 1) ask_account; bash "$script_dir/ssh-accounts.sh" create "$account" "$validity"; pause;; 2) ask_account; bash "$script_dir/ssh-accounts.sh" renew "$account" "$validity"; pause;; 3) bash "$script_dir/ssh-accounts.sh" choose-delete; pause;; 4) bash "$script_dir/ssh-accounts.sh" list; pause;; 0) return;; *) echo 'Invalid option.'; sleep 1;; esac
   done
 }
@@ -262,7 +267,7 @@ while true; do
   item 12 'Reboot Server'
   printf '  [%b00%b] %bExit%b\n' "$RED" "$NC" "$BOLD" "$NC"
   echo
-  read -r -p '  ► Select an option: ' choice
+  read_menu_option choice '  ► Select an option: ' || exit 0
   case "$choice" in
     1|01) ssh_menu ;;
     2|02) hysteria1_menu ;;

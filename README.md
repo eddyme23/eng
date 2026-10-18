@@ -57,3 +57,11 @@ Fresh installations automatically select the dedicated loopback OpenSSH backend 
 on port 22 is unchanged. The backend is enabled at boot and checked before the
 installer reports success. Existing installations can use
 `bash ./apply-ssh-capacity-fix.sh`; rollback remains available with `--rollback`.
+
+All protocol services are installed and enabled at boot by the fresh installer
+(HCR/BHTTP can still be explicitly skipped with their V6_INSTALL_* options).
+Startup failures now stop setup instead of printing a successful enable message.
+The BHTTP alternate proxy starts on demand through its enabled socket; account
+cleanup and certificate renewal run through enabled timers. These worker services
+are not expected to run continuously. Menu choices accept 0/00 for Back (Exit at
+the main menu), and padded choices such as 01 and 08 are accepted throughout.
