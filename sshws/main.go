@@ -79,8 +79,8 @@ func main() {
 func relayRaw(reader io.Reader, ssh net.Conn, client net.Conn) {
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go func() { defer wg.Done(); _, _ = io.Copy(ssh, reader); _ = ssh.(*net.TCPConn).CloseWrite() }()
-	go func() { defer wg.Done(); _, _ = io.Copy(client, ssh) }()
+	go func() { defer wg.Done(); defer ssh.Close(); defer client.Close(); _, _ = io.Copy(ssh, reader) }()
+	go func() { defer wg.Done(); defer ssh.Close(); defer client.Close(); _, _ = io.Copy(client, ssh) }()
 	wg.Wait()
 }
 

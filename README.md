@@ -41,3 +41,9 @@ Menu: `frimps-v6-menu` or `menu`.
 BHTTP restarts now stop the alternate-port socket and its active proxy together before restarting the backend and reopening the socket. This avoids rebinding port 8180 while the proxy still holds it. Apply with `bash ./refresh-menu-v6.sh`, then `bash ./restart-bhttp.sh`. Service controls 9 (HCR) and 10 (BHTTP) use the maintained restart actions; their submenus accept padded option numbers. A socket-activated proxy may be inactive before the first client connection.
 
 HCR and BHTTP no longer have separate installer submenus under Service Controls. They are included in Restart SSH services and Restart all, shown in service status, and available under View protocol logs (HCR NTLS/TLS and BHTTP). Fresh installation continues to install both by default.
+
+### AIO-style SSH connection handling
+
+Run `bash ./apply-aio-ssh-fixes.sh` on an installed server to rebuild gateways and move SlowDNS to existing OpenSSH on loopback TCP 22. This disconnects SSH/payload and SlowDNS sessions; it does not change administrative SSH configuration, accounts or host keys. Fresh SlowDNS installs use OpenSSH 22.
+
+Legacy HTTP payload connections receive 101/200 first, then must send `SSH-` identification within 30 seconds before a Dropbear connection is opened. HTTP-only clients do not consume Dropbear pending-authentication slots. Standard WebSocket and OpenVPN routing remain separate. Clients waiting for a server SSH banner before sending their identification are not compatible with this legacy deferred path; SSL Direct retains its existing fallback. Gateway relay endpoints close together on disconnect. Dropbear's authentication limits remain unchanged, so repeated actual SSH login attempts can still exhaust them.

@@ -28,8 +28,18 @@ func proxy(client net.Conn, reader io.Reader, target string, connectTimeout time
 
 	var copies sync.WaitGroup
 	copies.Add(2)
-	go func() { defer copies.Done(); _, _ = io.Copy(backend, reader); _ = backend.(*net.TCPConn).CloseWrite() }()
-	go func() { defer copies.Done(); _, _ = io.Copy(client, backend) }()
+	go func() {
+		defer copies.Done()
+		defer client.Close()
+		defer backend.Close()
+		_, _ = io.Copy(backend, reader)
+	}()
+	go func() {
+		defer copies.Done()
+		defer client.Close()
+		defer backend.Close()
+		_, _ = io.Copy(client, backend)
+	}()
 	copies.Wait()
 }
 

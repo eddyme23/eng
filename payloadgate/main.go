@@ -69,22 +69,9 @@ func hasWebSocketKey(header []byte) bool {
 func copyTunnel(client, backend net.Conn, inbound func() error) {
 	var copies sync.WaitGroup
 	copies.Add(2)
-	go func() {
-		defer copies.Done()
-		if err := inbound(); err != nil {
-			_ = client.Close()
-			_ = backend.Close()
-			return
-		}
-		if tcp, ok := backend.(*net.TCPConn); ok {
-			_ = tcp.CloseWrite()
-		}
-	}()
-	go func() {
-		defer copies.Done()
-		_, _ = io.Copy(client, backend)
-		_ = client.Close()
-	}()
+	closeBoth := func() { _ = client.Close(); _ = backend.Close() }
+	go func() { defer copies.Done(); defer closeBoth(); _ = inbound() }()
+	go func() { defer copies.Done(); defer closeBoth(); _, _ = io.Copy(client, backend) }()
 	copies.Wait()
 }
 
@@ -106,6 +93,25 @@ func handle(client net.Conn, sshTarget, wsTarget, openvpnTarget string) {
 	} else if websocket {
 		target = wsTarget
 	}
+	var firstSSH []byte
+	if !websocket && !openvpn {
+		response := "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n"
+		if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(string(header))), "CONNECT ") {
+			response = "HTTP/1.1 200 Connection established\r\nConnection: keep-alive\r\n\r\n"
+		}
+		if _, err := io.WriteString(client, response); err != nil {
+			return
+		}
+		_ = client.SetWriteDeadline(time.Time{})
+		_ = client.SetReadDeadline(time.Now().Add(30 * time.Second))
+		// Legacy clients identify SSH after the HTTP response. Do not consume a
+		// Dropbear authentication slot for HTTP-only or idle clients.
+		firstSSH, err = waitForSSH(reader)
+		if err != nil {
+			return
+		}
+		_ = client.SetReadDeadline(time.Time{})
+	}
 	backend, err := net.DialTimeout("tcp", target, 15*time.Second)
 	if err != nil {
 		log.Printf("connect %s: %v", target, err)
@@ -123,24 +129,8 @@ func handle(client net.Conn, sshTarget, wsTarget, openvpnTarget string) {
 		copyTunnel(client, backend, func() error { _, err := io.Copy(backend, reader); return err })
 		return
 	}
-	response := "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n"
-	if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(string(header))), "CONNECT ") {
-		response = "HTTP/1.1 200 Connection established\r\nConnection: keep-alive\r\n\r\n"
-	}
-	if _, err := io.WriteString(client, response); err != nil {
-		return
-	}
-	_ = client.SetWriteDeadline(time.Time{})
-	// Connect before waiting for client identification. SSH clients can receive
-	// the server banner even when they send no bytes after the HTTP upgrade.
-	_ = client.SetReadDeadline(time.Now().Add(30 * time.Second))
 	copyTunnel(client, backend, func() error {
-		firstSSH, err := waitForSSH(reader)
-		if err != nil {
-			return err
-		}
-		_ = client.SetReadDeadline(time.Time{})
-		_, err = io.Copy(backend, io.MultiReader(bytes.NewReader(firstSSH), reader))
+		_, err := io.Copy(backend, io.MultiReader(bytes.NewReader(firstSSH), reader))
 		return err
 	})
 }

@@ -25,16 +25,16 @@ curl -fL --retry 3 -o "$tmp" "$url"; printf '%s  %s\n' "$hash" "$tmp" | sha256su
 install -m 700 "$tmp" /etc/slowdns/sldns-server
 cat >/etc/systemd/system/frimps-slowdns.service <<EOF
 [Unit]
-Description=frimps SlowDNS to Dropbear bridge
-After=network-online.target frimps-v6-dropbear.service frimps-v6-udp-routing.service
-Requires=frimps-v6-dropbear.service frimps-v6-udp-routing.service
+Description=frimps SlowDNS to OpenSSH bridge
+After=network-online.target ssh.service frimps-v6-udp-routing.service
+Requires=ssh.service frimps-v6-udp-routing.service
 [Service]
-ExecStart=/etc/slowdns/sldns-server -udp $listen_ip:53 -privkey-file /etc/slowdns/server.key $ns 127.0.0.1:143
+ExecStart=/etc/slowdns/sldns-server -udp $listen_ip:53 -privkey-file /etc/slowdns/server.key $ns 127.0.0.1:22
 Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
-echo 'SlowDNS configured on UDP 53 to Dropbear TCP 143.'
+echo 'SlowDNS configured on UDP 53 to OpenSSH TCP 22.'
 echo "Nameserver: $ns"
 echo "Public key: $(cat /etc/slowdns/server.pub)"
