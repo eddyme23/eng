@@ -33,6 +33,7 @@ ln -sfn "$runtime_dir/menu-v6.sh" /usr/local/bin/frimps-v6-menu
 ln -sfn "$runtime_dir/menu-v6.sh" /usr/local/bin/menu
 bash "$runtime_dir/apply-service-hardening.sh"
 bash "$runtime_dir/install-maintenance-timer.sh"
+bash "$runtime_dir/install-health-monitor.sh"
 bash "$runtime_dir/enable-frimps-services.sh"
 if [[ -f /etc/systemd/system/frimps-hcr.service ]]; then bash "$script_dir/retire-hcr-trial.sh"; fi
 

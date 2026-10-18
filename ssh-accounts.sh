@@ -2,6 +2,12 @@
 set -euo pipefail
 
 state_dir="${V6_STATE_DIR:-/etc/frimps-v6}"
+# Serialize the complete read/modify/render transaction, including expiry jobs.
+[[ $EUID -eq 0 ]] || { echo 'run as root' >&2; exit 1; }
+install -d -m 700 "$state_dir"
+exec 9>"$state_dir/.ssh-accounts.lock"
+flock -w 30 9 || { echo 'Account store is busy; retry shortly.' >&2; exit 1; }
+
 store="$state_dir/ssh-users.json"
 action="${1:-}"
 user="${2:-}"

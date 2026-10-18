@@ -4,6 +4,12 @@
 set -euo pipefail
 
 state_dir="${V6_STATE_DIR:-/etc/frimps-v6}"
+# Serialize the complete read/modify/render transaction, including expiry jobs.
+[[ $EUID -eq 0 ]] || { echo 'run as root' >&2; exit 1; }
+install -d -m 700 "$state_dir"
+exec 9>"$state_dir/.wireguard-accounts.lock"
+flock -w 30 9 || { echo 'Account store is busy; retry shortly.' >&2; exit 1; }
+
 store="$state_dir/wireguard-users.json"
 client_dir="/etc/wireguard/clients"
 config="/etc/wireguard/wg0.conf"
@@ -102,6 +108,11 @@ migrate_dns() {
 
 init
 action="${1:-}"
+delete_peer_account() {
+    local name="$1" row public; row="$(jq -c --arg n "$name" '.[] | select(.name == $n)' "$store")"; [[ -n "$row" ]] || die 'account not found'
+    public="$(jq -r '.publicKey' <<<"$row")"; if systemctl is-active --quiet wg-quick@wg0; then wg set wg0 peer "$public" remove; fi
+    remove_peer "$name"; commit_store "$(jq --arg n "$name" 'map(select(.name != $n))' "$store")"; rm -f "$client_dir/$name.conf"; echo "Deleted $name"
+}
 case "$action" in
   create)
     name="${2:-}"; days="${3:-}"; valid_name "$name" || die 'username must be 1-32 letters, digits, _ or -'; [[ "$days" =~ ^[1-9][0-9]{0,3}$ ]] || die 'days must be a positive integer'
@@ -119,15 +130,12 @@ case "$action" in
     row="$(jq -c --arg n "$name" '.[] | select(.name == $n)' "$store")"; [[ -n "$row" ]] || die 'account not found'
     public="$(jq -r '.publicKey' <<<"$row")"; ip="$(jq -r '.ip' <<<"$row")"; rewrite_config "$name" "$public" "$ip" "$expires"
     commit_store "$(jq --arg n "$name" --arg e "$expires" 'map(if .name == $n then .expiresAt = $e else . end)' "$store")"; sync_live; echo "Renewed $name through $expires" ;;
-  delete)
-    name="${2:-}"; row="$(jq -c --arg n "$name" '.[] | select(.name == $n)' "$store")"; [[ -n "$row" ]] || die 'account not found'
-    public="$(jq -r '.publicKey' <<<"$row")"; if systemctl is-active --quiet wg-quick@wg0; then wg set wg0 peer "$public" remove; fi
-    remove_peer "$name"; commit_store "$(jq --arg n "$name" 'map(select(.name != $n))' "$store")"; rm -f "$client_dir/$name.conf"; echo "Deleted $name" ;;
+  delete) delete_peer_account "${2:-}" ;;
   list) jq -r '.[] | [.name,.ip,.expiresAt] | @tsv' "$store" | column -t -N NAME,ADDRESS,EXPIRES ;;
   config) name="${2:-}"; [[ -f "$client_dir/$name.conf" ]] || die 'account/config not found'; cat "$client_dir/$name.conf" ;;
   link) name="${2:-}"; [[ -f "$client_dir/$name.conf" ]] || die 'account/config not found'; wireguard_link "$name" ;;
   migrate-dns) migrate_dns ;;
   cleanup)
-    today="$(date -u +%F)"; jq -r --arg d "$today" '.[] | select(.expiresAt < $d) | .name' "$store" | while read -r name; do [[ -n "$name" ]] && "$0" delete "$name"; done ;;
+    today="$(date -u +%F)"; jq -r --arg d "$today" '.[] | select(.expiresAt < $d) | .name' "$store" | while read -r name; do [[ -n "$name" ]] && delete_peer_account "$name"; done ;;
   *) die 'usage: wireguard-accounts.sh {create NAME DAYS|renew NAME DAYS|delete NAME|list|config NAME|link NAME|migrate-dns|cleanup}' ;;
 esac

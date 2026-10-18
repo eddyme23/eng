@@ -47,7 +47,7 @@ cleanup_json() {
   [[ -f "$file" ]] || return 0
   today="$(date -u +%F)"
   while IFS= read -r value; do
-    [[ -n "$value" ]] && bash "$script_dir/$script" delete "$value"
+    [[ -n "$value" ]] && V6_DELETE_EXPIRED_ONLY=1 bash "$script_dir/$script" delete "$value"
   done < <(jq -r --arg today "$today" ".[] | select(.expiresAt < \$today) | .$key" "$file")
 }
 cleanup() {

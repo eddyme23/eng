@@ -100,3 +100,24 @@ throughput. Restore the default with `bash ./apply-slowdns-mtu.sh 1232`.
 The fresh-install default remains 1232; an explicitly selected size survives a
 SlowDNS reinstall. These errors alone do not identify which client's resolver
 path is affected, and a smaller response size is not a confirmed browsing fix.
+
+### Guarded maintenance
+
+Fresh installs and `bash ./refresh-menu-v6.sh` install `frimps-health.timer`.
+Every three minutes (after a five-minute boot grace), enabled services receive
+local process/listener checks. Three consecutive failures trigger recovery of
+only that service, with a 30-minute per-service cooldown. Listener checks verify
+service cgroup ownership where applicable; WireGuard uses its kernel socket.
+Some auxiliary services receive process-state checks only. These checks do not
+prove successful authentication or browsing and do not depend on public websites.
+Disabled services are skipped. Inspect results with
+`journalctl -u frimps-health.service`; disable with
+`systemctl disable --now frimps-health.timer`.
+
+Account operations serialize each protocol's read/update/render transaction with
+a 30-second lock wait. Expiry cleanup rechecks expiry under that lock so a
+concurrent renewal is preserved. Frimps file logs under `/var/log/frimps/*.log`
+rotate daily (or above 20 MB at the next logrotate run), retaining seven rotations.
+Frimps protocol journal output is rate-limited per service; existing journal
+retention and system log policies are preserved. Journal limits take effect on
+the next service restart. Refreshing does not restart healthy protocol sessions.

@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 state_dir="${V6_STATE_DIR:-/etc/frimps-v6}"
+# Serialize the complete read/modify/render transaction, including expiry jobs.
+[[ $EUID -eq 0 ]] || { echo 'run as root' >&2; exit 1; }
+install -d -m 700 "$state_dir"
+exec 9>"$state_dir/.hysteria2-accounts.lock"
+flock -w 30 9 || { echo 'Account store is busy; retry shortly.' >&2; exit 1; }
+
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/ui-v6.sh"
 store="$state_dir/hysteria2-users.json"
 clients=/etc/hysteria2/clients
@@ -9,6 +15,10 @@ die(){ echo "v6 Hysteria 2: $*" >&2; exit 1; }
 [[ $EUID -eq 0 ]] || die 'run as root'; command -v jq >/dev/null || die 'install jq'
 action="${1:-}"; name="${2:-}"; valid(){ [[ "$1" =~ ^[a-zA-Z0-9_-]{1,32}$ ]]; }; commit(){ local t; t=$(mktemp "$state_dir/.hy2.XXXXXX"); printf '%s\n' "$1" > "$t"; chmod 600 "$t"; mv "$t" "$store"; }
 [[ -f "$store" ]] || die 'run hysteria2-install.sh first'; install -d -m 700 "$clients"
+# Expiry selection may have happened before this transaction acquired its lock.
+if [[ ${V6_DELETE_EXPIRED_ONLY:-0} == 1 && ${1:-} == delete ]]; then
+  jq -e --arg value "${2:-}" --arg today "$(date -u +%F)" '.[] | select(.name == $value and .expiresAt < $today)' "$store" >/dev/null || exit 0
+fi
 case "$action" in
  create) days="${3:-}"; valid "$name" || die 'invalid username'; [[ "$days" =~ ^[1-9][0-9]{0,3}$ ]] || die 'invalid days'; jq -e --arg n "$name" '.[]|select(.name==$n)' "$store" >/dev/null && die 'account exists'; exp=$(date -u -d "+$days days" +%F); pass=$(openssl rand -hex 18); commit "$(jq --arg n "$name" --arg p "$pass" --arg e "$exp" '.+[{name:$n,password:$p,expiresAt:$e}]' "$store")"; /usr/local/libexec/frimps-v6-hysteria2-render; systemctl reset-failed hysteria2-server.service || true; systemctl enable --now hysteria2-server.service; obfs="${V6_HYSTERIA2_OBFS:-}"; suffix="sni=${V6_DOMAIN}"; [[ -n "$obfs" ]] && suffix="${suffix}&insecure=1&obfs=salamander&obfs-password=${obfs}"; printf 'hysteria2://%s:%s@%s:443/?%s#HY2-%s\n' "$name" "$pass" "${V6_DOMAIN:?set V6_DOMAIN}" "$suffix" "$name" > "$clients/$name.uri"; chmod 600 "$clients/$name.uri"; ui_success_title 'HYSTERIA 2 ACCOUNT CREATED'; ui_kv 'Host' "$V6_DOMAIN"; ui_kv 'Username' "$name"; ui_kv 'Password' "$pass"; ui_kv 'Expiry Date' "$exp"; ui_rule; cat "$clients/$name.uri" ;;
  renew) days="${3:-}"; [[ "$days" =~ ^[1-9][0-9]{0,3}$ ]] || die 'invalid days'; jq -e --arg n "$name" '.[]|select(.name==$n)' "$store" >/dev/null || die 'account does not exist'; exp=$(date -u -d "+$days days" +%F); commit "$(jq --arg n "$name" --arg e "$exp" 'map(if .name==$n then .expiresAt=$e else . end)' "$store")"; /usr/local/libexec/frimps-v6-hysteria2-render ;;

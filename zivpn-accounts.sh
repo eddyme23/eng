@@ -4,6 +4,12 @@
 set -euo pipefail
 
 state_dir="${V6_STATE_DIR:-/etc/frimps-v6}"
+# Serialize the complete read/modify/render transaction, including expiry jobs.
+[[ $EUID -eq 0 ]] || { echo 'run as root' >&2; exit 1; }
+install -d -m 700 "$state_dir"
+exec 9>"$state_dir/.zivpn-accounts.lock"
+flock -w 30 9 || { echo 'Account store is busy; retry shortly.' >&2; exit 1; }
+
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/ui-v6.sh"
 store="$state_dir/zivpn-users.json"
 config=/etc/zivpn/config.json
@@ -40,6 +46,10 @@ render() {
 }
 
 action="${1:-}"; password="${2:-}"; days="${3:-}"
+# Expiry selection may have happened before this transaction acquired its lock.
+if [[ ${V6_DELETE_EXPIRED_ONLY:-0} == 1 && ${1:-} == delete ]]; then
+  jq -e --arg value "${2:-}" --arg today "$(date -u +%F)" '.[] | select(.password == $value and .expiresAt < $today)' "$store" >/dev/null || exit 0
+fi
 case "$action" in
   create)
     valid_password "$password" || die 'password/username must be 1-64 letters, digits, dot, underscore, or hyphen'
