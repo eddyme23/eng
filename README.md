@@ -51,3 +51,9 @@ Legacy HTTP payload connections receive 101/200 first, then must send `SSH-` ide
 TLS HTTP/1 payloads now go directly from tlsmux to payloadgate on loopback 3102. Nginx reverse-proxy upgrade handling could return 101 yet fail to tunnel a legacy request lacking the Upgrade header. Direct routing supports those raw legacy payloads as well as standard WebSocket and `/openvpn`; HTTP/2 retains its separate Nginx route. Apply with `bash ./apply-aio-ssh-fixes.sh` (or `apply-connection-fixes.sh` if SlowDNS was already migrated). Gateway unit validation now requires the direct HTTP/1 target. TLS routing/relay integration tests can run with `ENG_RUN_TLS_INTEGRATION=1`, Go and OpenSSL available.
 
 For a controlled capacity test on an affected VPS, run `bash ./apply-ssh-capacity-fix.sh`. This creates a dedicated OpenSSH instance on 127.0.0.1:2222, with a 30-second login grace time and MaxStartups 100:30:300, then selects it for TLS Direct, payload and WebSocket gateways using named systemd overrides. It reuses existing OpenSSH host keys and account authentication, does not edit administrative SSH configuration or HCR/BHTTP targets, and keeps the fresh-install default unchanged. It validates configuration and the SSH banner before switching gateways. Root login is disabled on this dedicated backend. Existing gateway sessions disconnect and client host-key prompts may change. Roll back with `bash ./apply-ssh-capacity-fix.sh --rollback`. Script/transport tests do not replace real PAM/password, expiry and browsing checks on Debian.
+
+Fresh installations automatically select the dedicated loopback OpenSSH backend on
+127.0.0.1:2222 for SSH payload, WebSocket, and TLS gateways. Administrative SSH
+on port 22 is unchanged. The backend is enabled at boot and checked before the
+installer reports success. Existing installations can use
+`bash ./apply-ssh-capacity-fix.sh`; rollback remains available with `--rollback`.

@@ -91,7 +91,7 @@ apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
   ca-certificates curl wget git jq openssl unzip tar \
   iproute2 nftables net-tools procps dnsutils cron \
-  nginx haproxy dropbear-bin openvpn easy-rsa stunnel4 \
+  nginx haproxy dropbear-bin openssh-server openvpn easy-rsa stunnel4 \
   nodejs npm golang-go wireguard-tools python3 \
   certbot python3-certbot-dns-cloudflare
 
@@ -211,12 +211,20 @@ if [[ ${V6_INSTALL_BHTTP:-1} == 1 ]]; then bash "$script_dir/bhttp-install.sh"; 
 if [[ ${V6_INSTALL_HCR:-1} == 1 ]]; then bash "$script_dir/hcr-install.sh"; fi
 if [[ ${V6_INSTALL_HCR_TLS:-1} == 1 ]]; then bash "$script_dir/hcr-tls-install.sh"; fi
 
+# Use the same dedicated backend verified by repeated app reconnects.
+# Preserve an already selected backend when resuming an interrupted install.
+note 'Configuring the dedicated SSH gateway backend'
+if [[ ! -s "$state_dir/ssh-capacity.env" ]]; then
+  bash "$script_dir/apply-ssh-capacity-fix.sh"
+fi
+systemctl enable --now frimps-v6-ssh-backend.service
+
 note 'Enabling every installed Frimps service for this boot and future boots'
 bash "$script_dir/refresh-menu-v6.sh"
 systemctl enable --now certbot.timer
 bash "$script_dir/postflight-v6.sh"
 
-required_units='frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield hysteria1-server hysteria2-server wg-quick@wg0 frimps-slowdns zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip nginx haproxy'
+required_units='frimps-v6-ssh-backend frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield hysteria1-server hysteria2-server wg-quick@wg0 frimps-slowdns zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip nginx haproxy'
 if [[ ${V6_INSTALL_BHTTP:-1} == 1 ]]; then required_units+=' frimps-bhttp frimps-bhttp-alt.socket'; fi
 if [[ ${V6_INSTALL_HCR:-1} == 1 ]]; then required_units+=' frimps-hcr'; fi
 if [[ ${V6_INSTALL_HCR_TLS:-1} == 1 ]]; then required_units+=' frimps-hcr-tls'; fi
