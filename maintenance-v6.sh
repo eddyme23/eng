@@ -20,11 +20,11 @@ restart() {
     hcr) units='frimps-hcr' ;;
     hcrtls) units='frimps-hcr-tls' ;;
     bhttp) bash "$script_dir/restart-bhttp.sh"; return ;;
-    ssh) units='nginx haproxy frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-hcr frimps-hcr-tls frimps-bhttp frimps-bhttp-alt.socket' ;;
+    ssh) units='nginx haproxy frimps-v6-dropbear frimps-v6-ssh-backend frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-hcr frimps-hcr-tls frimps-bhttp frimps-bhttp-alt.socket' ;;
     udp) units='frimps-v6-udp-routing frimps-slowdns hysteria1-server hysteria2-server zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip' ;;
     openvpn) units='frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield' ;;
     wireguard) units='frimps-v6-wireguard-nat wg-quick@wg0' ;;
-    all) units='frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-hcr frimps-hcr-tls frimps-bhttp frimps-bhttp-alt.socket frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-slowdns hysteria1-server hysteria2-server zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield wg-quick@wg0 nginx haproxy' ;;
+    all) units='frimps-v6-dropbear frimps-v6-ssh-backend frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-hcr frimps-hcr-tls frimps-bhttp frimps-bhttp-alt.socket frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-slowdns hysteria1-server hysteria2-server zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield wg-quick@wg0 nginx haproxy' ;;
     *) die 'usage: maintenance-v6.sh restart {ssh|udp|openvpn|wireguard|hcr|hcrtls|bhttp|all}' ;;
   esac
   for unit in $units; do
@@ -63,7 +63,7 @@ logs() {
   local unit item
   local -a journal_units=()
   case "${1:-}" in
-    ssh) unit='frimps-v6-sshws.service' ;;
+    ssh) unit='frimps-v6-sshws.service frimps-v6-payloadgate.service frimps-v6-tlsmux.service frimps-v6-ssh-backend.service' ;;
     openvpn) unit='frimps-openvpn-gateway.service frimps-openvpn-stunnel.service frimps-openvpn-bshield.service' ;;
     bhttp) unit='frimps-bhttp.service frimps-bhttp-alt.socket frimps-bhttp-alt.service' ;;
     hcr) unit='frimps-hcr.service frimps-hcr-tls.service' ;;

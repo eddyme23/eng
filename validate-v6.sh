@@ -18,6 +18,7 @@ check grep -q 'default_backend ssh_http_gateway' "$state_dir/haproxy-443.cfg"
 
 check grep -q 'location = /openvpn' "$state_dir/nginx-main-tls.conf"
 check grep -q 'location = /' "$state_dir/nginx-main-tls.conf"
+check grep -q -- '-http1-target 127.0.0.1:3102' "$state_dir/tlsmux.service"
 check grep -q -- '-ssh-target 127.0.0.1:143' "$state_dir/tlsmux.service"
 check grep -q -- '-ws-target 127.0.0.1:3103' "$state_dir/payloadgate.service"
 check jq -e '.socksipRanges == ["1195-3999"]' "$state_dir/routes.json"

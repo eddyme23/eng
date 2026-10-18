@@ -19,6 +19,7 @@ class RoutingTemplateTest(unittest.TestCase):
         self.assertIn('EnvironmentFile=-/etc/frimps-v6/tlsmux.env', source)
         self.assertIn(r'-silent-timeout \${FRIMPS_TLS_SILENT_TIMEOUT}', source)
         self.assertIn('-identify-timeout 15s -connect-timeout 5s', source)
+        self.assertIn('-http1-target 127.0.0.1:3102',source)
         self.assertIn('-openvpn-target 127.0.0.1:10081',source)
 
 if __name__=='__main__':unittest.main()

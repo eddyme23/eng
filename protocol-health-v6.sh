@@ -32,6 +32,10 @@ if [[ "$mode" == '--live' ]]; then
   for unit in nginx haproxy frimps-v6-dropbear frimps-v6-sshws frimps-v6-tlsmux frimps-v6-payloadgate; do
     check_cmd systemctl is-active --quiet "$unit"
   done
+  if [[ -s "$state_dir/ssh-capacity.env" ]]; then
+    check_cmd systemctl is-active --quiet frimps-v6-ssh-backend
+    check_listener 2222
+  fi
   for port in 443 80 8080 8880 2082 2086; do
     check_listener "$port"
   done

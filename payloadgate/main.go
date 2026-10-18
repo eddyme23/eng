@@ -33,7 +33,7 @@ func readHeader(reader *bufio.Reader) ([]byte, error) {
 }
 
 // GF payloads may include multiple HTTP-looking headers before SSH starts.
-// This runs only on the inbound copy: the server banner can flow immediately.
+// Legacy payloads must identify SSH before a backend connection is opened.
 func waitForSSH(reader *bufio.Reader) ([]byte, error) {
 	buf := make([]byte, 0, 4096)
 	for len(buf) < maxPreface {
@@ -108,6 +108,7 @@ func handle(client net.Conn, sshTarget, wsTarget, openvpnTarget string) {
 		// Dropbear authentication slot for HTTP-only or idle clients.
 		firstSSH, err = waitForSSH(reader)
 		if err != nil {
+            log.Printf("legacy SSH identification from %s: %v", client.RemoteAddr(), err)
 			return
 		}
 		_ = client.SetReadDeadline(time.Time{})

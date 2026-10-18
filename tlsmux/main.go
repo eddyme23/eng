@@ -48,7 +48,7 @@ func main() {
 	certPath := flag.String("cert", "/etc/certificates/main.crt", "certificate file")
 	keyPath := flag.String("key", "/etc/certificates/main.key", "private key file")
 	sshTarget := flag.String("ssh-target", "127.0.0.1:143", "raw SSH target")
-	http1Target := flag.String("http1-target", "127.0.0.1:9081", "HTTP/1.1 target")
+	http1Target := flag.String("http1-target", "127.0.0.1:3102", "HTTP/1.1 payload gateway target")
 	h2Target := flag.String("h2-target", "127.0.0.1:9080", "HTTP/2 target")
 	silentTimeout := flag.Duration("silent-timeout", 250*time.Millisecond, "silent TLS client fallback to SSH")
 	identifyTimeout := flag.Duration("identify-timeout", 15*time.Second, "maximum time to finish a partial protocol prefix")
