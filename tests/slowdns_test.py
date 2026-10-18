@@ -61,3 +61,17 @@ class SlowdnsKeysTest(unittest.TestCase):
         accounts = (ROOT / "ssh-accounts.sh").read_text(encoding="utf-8")
         self.assertNotIn("7fbd1f8aa0ab", postflight + accounts)
         self.assertIn('slowdns-audit.sh" --local', (ROOT / "protocol-health-v6.sh").read_text(encoding="utf-8"))
+
+    def test_flow_probe_uses_runtime_listener_and_tunnel_domain(self):
+        source = (ROOT / "slowdns-flow-audit.sh").read_text(encoding="utf-8")
+        probe = source[source.index("if [[ $command_line =~"):source.index('echo "=== Account')]
+        for domain, expected in (("ns-fr.vpnguruz.store", True), ("invalid;name", False)):
+            code = ('command_line="ExecStart={ path=/etc/slowdns/sldns-server ; argv[]=/etc/slowdns/sldns-server -udp 81.17.97.202:53 -privkey-file /etc/slowdns/server.key '
+                    + domain + ' 127.0.0.1:22 ; }"\n'
+                    + 'dig() { printf "PROBE %s\\n" "$*"; };\n' + probe)
+            result = subprocess.run([BASH, "-c", code], capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            if expected:
+                self.assertIn(b"@81.17.97.202 _eng-audit.ns-fr.vpnguruz.store TXT", result.stdout)
+            else:
+                self.assertNotIn(b"PROBE", result.stdout)

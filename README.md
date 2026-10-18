@@ -78,3 +78,12 @@ on reinstall, including legacy keys, so clients are not silently invalidated.
 To apply SlowDNS-only installation fixes: `bash ./slowdns-install.sh` (disconnects
 SlowDNS sessions), then `bash ./refresh-menu-v6.sh` and `bash ./slowdns-audit.sh`.
 The managed backup now includes /etc/slowdns.
+
+For SlowDNS connections without browsing, run
+`bash ./slowdns-flow-audit.sh USERNAME` during a reconnect and browsing attempt.
+This read-only report includes the actual listener/command, a local DNS error
+response probe, account expiry/lock state, per-account OpenSSH forwarding policy,
+current-boot authentication events, complete firewall rules and host HTTPS access.
+The local probe uses an intentionally invalid tunnel name; a DNS error response
+is expected and does not establish an encrypted client session. A UDP 53 exception
+in the Frimps NAT table alone does not prove other NAT/filter tables permit traffic.

@@ -40,7 +40,7 @@ echo 'OpenSSH authentication/forwarding policy (local default context):'
 timeout 5 /usr/sbin/sshd -T -C user=frimps-audit,host=localhost,addr=127.0.0.1,laddr=127.0.0.1,lport=22 2>/dev/null | grep -E '^(passwordauthentication|usepam|allowtcpforwarding|disableforwarding|maxstartups|logingracetime|permitrootlogin) ' || true
 if command -v nft >/dev/null; then
   policy="$(nft list table ip frimps_v6_udp 2>/dev/null)"
-  if [[ $policy == *'53, 443, 1194, 4000'* ]]; then echo '[OK] Managed NAT policy reserves UDP 53'; else echo '[FAIL] UDP 53 reservation missing from managed routing policy' >&2; failed=1; fi
+  if [[ $policy == *'53, 443, 1194, 4000'* ]]; then echo '[OK] Frimps NAT table reserves UDP 53 (other tables/filter chains still require inspection)'; else echo '[FAIL] UDP 53 reservation missing from managed routing policy' >&2; failed=1; fi
 fi
 if [[ ${1:-} != --local ]]; then
   if [[ -r "$state_dir/service-options.env" ]]; then source "$state_dir/service-options.env"; fi
@@ -78,4 +78,5 @@ journalctl -u frimps-slowdns.service -n 20 --no-pager || true
 echo 'Use the displayed DNS public key, the delegated tunnel domain, and a valid SSH account.'
 echo 'DNS NS targets must resolve to the VPS public IPv4. Provider/host firewalls must allow inbound UDP 53.'
 echo 'These checks do not establish a successful DNS tunnel, SSH password login, or client browsing.'
+echo 'If connected without browsing, run: bash ./slowdns-flow-audit.sh SSH_USERNAME'
 exit "$failed"
