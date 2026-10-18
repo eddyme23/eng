@@ -113,7 +113,7 @@ case "$action" in
     domain="$(jq -r '.primaryDomain // empty' "$state_dir/routes.json")"
     slowdns_ns='Not configured'; [[ -r "$state_dir/service-options.env" ]] && source "$state_dir/service-options.env" && slowdns_ns="${V6_SLOWDNS_NS:-$slowdns_ns}"
     slowdns_ip="$(slowdns_public_ipv4)"
-    slowdns_pubkey="$(cat /etc/slowdns/server.pub 2>/dev/null || printf '%s' '7fbd1f8aa0abfe15a7903e837f78aba39cf61d36f183bd604daa2fe4ef3b7b59')"
+    slowdns_pubkey="$(cat /etc/slowdns/server.pub 2>/dev/null || printf '%s' 'Not configured')"
     printf '\n%b══════════════════════════════════════════════════════════════%b\n' "$GREEN" "$NC"
     printf '                   %bACCOUNT CREATED SUCCESSFULLY%b\n' "$BOLD" "$NC"
     printf '%b══════════════════════════════════════════════════════════════%b\n' "$GREEN" "$NC"

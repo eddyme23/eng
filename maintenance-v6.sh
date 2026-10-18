@@ -39,7 +39,7 @@ restart() {
 }
 backup() {
   stamp="$(date -u +%Y%m%dT%H%M%SZ)"; out="/root/frimps-backup-$stamp.tgz"
-  tar -czf "$out" --ignore-failed-read /etc/frimps-v6 /etc/hysteria1 /etc/hysteria2 /etc/zivpn /etc/openvpn /etc/wireguard /etc/systemd/system 2>/dev/null
+  tar -czf "$out" --ignore-failed-read /etc/slowdns /etc/frimps-v6 /etc/hysteria1 /etc/hysteria2 /etc/zivpn /etc/openvpn /etc/wireguard /etc/systemd/system 2>/dev/null
   chmod 600 "$out"; echo "Backup created: $out"
 }
 cleanup_json() {

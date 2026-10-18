@@ -32,6 +32,14 @@ if [[ "$mode" == '--live' ]]; then
   for unit in nginx haproxy frimps-v6-dropbear frimps-v6-sshws frimps-v6-tlsmux frimps-v6-payloadgate; do
     check_cmd systemctl is-active --quiet "$unit"
   done
+  if systemctl cat frimps-slowdns.service >/dev/null 2>&1; then
+    if slowdns_output="$(bash "$script_dir/slowdns-audit.sh" --local 2>&1)"; then
+      pass 'SlowDNS service, UDP listener, key pair and SSH backend'
+    else
+      fail 'SlowDNS local health'
+      printf '%s\n' "$slowdns_output"
+    fi
+  fi
   if [[ -s "$state_dir/ssh-capacity.env" ]]; then
     check_cmd systemctl is-active --quiet frimps-v6-ssh-backend
     check_listener 2222

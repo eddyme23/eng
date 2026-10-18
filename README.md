@@ -65,3 +65,16 @@ The BHTTP alternate proxy starts on demand through its enabled socket; account
 cleanup and certificate renewal run through enabled timers. These worker services
 are not expected to run continuously. Menu choices accept 0/00 for Back (Exit at
 the main menu), and padded choices such as 01 and 08 are accepted throughout.
+
+SlowDNS audit: `bash ./slowdns-audit.sh` checks boot state, UDP 53 ownership,
+matching DNS keys, the OpenSSH 22 banner, and public NS/A records. `--local`
+skips public DNS queries. Delegate the tunnel domain (V6_SLOWDNS_NS) with an NS
+record to a DNS-only hostname whose A record is the VPS public IPv4; the
+installer does not create these DNS records. Permit inbound UDP 53 at the host
+and provider firewall. Use an existing SSH account and the displayed DNS public
+key. An active service alone does not establish a working client connection.
+Fresh SlowDNS installs now generate a unique key pair. Existing pairs are kept
+on reinstall, including legacy keys, so clients are not silently invalidated.
+To apply SlowDNS-only installation fixes: `bash ./slowdns-install.sh` (disconnects
+SlowDNS sessions), then `bash ./refresh-menu-v6.sh` and `bash ./slowdns-audit.sh`.
+The managed backup now includes /etc/slowdns.
