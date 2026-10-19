@@ -8,11 +8,13 @@ state_dir="${V6_STATE_DIR:-/etc/frimps-v6}"
 unit=/etc/systemd/system/frimps-bhttp.service
 [[ ! -e $unit ]] || { echo 'BHTTP is already installed. Use its menu controls for status or restart.'; exit 0; }
 port="${BHTTP_PORT:-90}"
-sessions="${BHTTP_MAX_SESSIONS:-128}"
+source "$script_dir/bhttp-policy.sh"
+bhttp_policy "$(awk '/MemTotal:/ {print int($2/1024)}' /proc/meminfo)"
+sessions="${BHTTP_MAX_SESSIONS:-$BHTTP_POLICY_SESSIONS}"
 [[ $port =~ ^[0-9]{1,5}$ ]] && ((10#$port >= 1 && 10#$port <= 65535)) || { echo 'Choose a port from 1 to 65535.' >&2; exit 1; }
 port=$((10#$port))
 case "$port" in 22|53|80|443|1194|8433|8080|8880|2082|2086|8881|8444) echo 'Choose a separate port from eng and HCR listeners.' >&2; exit 1;; esac
-[[ $sessions =~ ^[1-9][0-9]{0,3}$ ]] && ((sessions <= 1024)) || { echo 'Maximum sessions must be from 1 to 1024.' >&2; exit 1; }
+[[ $sessions =~ ^[1-9][0-9]{0,3}$ ]] && ((sessions <= 8192)) || { echo 'Maximum sessions must be from 1 to 8192.' >&2; exit 1; }
 for cmd in curl sha256sum ss systemctl systemd-analyze install; do command -v "$cmd" >/dev/null || { echo "Missing command: $cmd" >&2; exit 1; }; done
 [[ -z $(ss -H -ltn "sport = :$port") ]] || { echo "TCP $port is occupied; no service was changed." >&2; exit 1; }
 [[ -n $(ss -H -ltn 'sport = :22') ]] || { echo 'OpenSSH must be listening on TCP 22.' >&2; exit 1; }
@@ -39,8 +41,8 @@ Type=exec
 User=root
 WorkingDirectory=/opt/frimps-bhttp
 ExecStart=/opt/frimps-bhttp/bhttp-server --listen 0.0.0.0 --port $port --backend-host 127.0.0.1 --backend-port 22 --session-ttl 180 --max-sessions $sessions --request-timeout 30 --read-wait-ms 2 --sequence-wait 6 --max-requests-per-conn 2048
-Restart=on-failure
-RestartSec=5s
+Restart=always
+RestartSec=1s
 TimeoutStopSec=15s
 UMask=0077
 NoNewPrivileges=true
@@ -55,10 +57,10 @@ ProtectControlGroups=true
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 RestrictNamespaces=true
 ReadOnlyPaths=/opt/frimps-bhttp
-LimitNOFILE=4096
+LimitNOFILE=524288
 LimitCORE=0
 TasksMax=512
-MemoryMax=384M
+MemoryMax=${BHTTP_POLICY_MEMORY_MB}M
 StandardOutput=journal
 StandardError=journal
 
