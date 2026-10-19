@@ -37,23 +37,3 @@ bash ./install-frimps.sh
 
 
 Menu: `frimps-v6-menu` or `menu`.
-
-### BHTTP capacity policy and verified updates
-
-BHTTP fresh installs use the HEX RAM tiers: below 768 MB = 512 sessions,
-below 1536 MB = 1024, below 3072 MB = 2048, below 6144 MB = 4096,
-otherwise 8192. Set `BHTTP_MAX_SESSIONS=NUMBER` to override (1–8192).
-These are concurrency ceilings, not guaranteed user capacity or speed.
-The service retains sandboxing and a memory ceiling of half physical RAM,
-capped at 4096 MB. It restarts after one second, including clean exits,
-with at most three starts per minute to prevent a crash loop.
-
-Existing production servers: `bash ./apply-bhttp-updates.sh`.
-This downloads the pinned, SHA-256 verified v2.4.1 engine, runs its self-test,
-backs up the current binary/unit/settings, applies RAM-based capacity, and
-restarts BHTTP using the alternate-socket-safe helper. Existing ports, including
-90 and 8180, are preserved. Existing sessions disconnect during activation.
-Activation failure restores the saved engine and settings automatically.
-Manual rollback: `bash ./apply-bhttp-updates.sh --rollback BACKUP_DIRECTORY`
-using the directory printed by the updater. This updater intentionally does
-not follow an unverified latest release or copy global TCP tuning.
