@@ -49,13 +49,18 @@ check() {
   fi
 }
 # Check the protocol's own listener; UDP services are not probed with fake logins.
-while read -r unit transport port; do check "$unit" "$transport" "$port"; done <<'UNITS'
+while read -r unit transport port; do
+  if [[ $unit == frimps-slowdns.service && -f /etc/frimps-v6/vaydns.env ]]; then port=5301; fi
+  check "$unit" "$transport" "$port"
+done <<'UNITS'
 frimps-v6-dropbear.service t 143
 frimps-v6-ssh-backend.service t 2222
 frimps-v6-sshws.service t 3103
 frimps-v6-payloadgate.service t 3102
 frimps-v6-tlsmux.service t 9443
 frimps-slowdns.service u 53
+frimps-vaydns.service u 5302
+frimps-dns-dispatch.service u 53
 hysteria1-server.service u 36712
 hysteria2-server.service u 443
 zivpn.service u 5667

@@ -129,6 +129,11 @@ case "$action" in
     printf '  %bExpiry%b     : %b%s%b\n' "$WHITE" "$NC" "$YELLOW" "$expiry" "$NC"
     printf '%b--------------------------------------------------------------%b\n' "$CYAN" "$NC"
     printf '  SSH Port   : 22, 143\n  Dropbear   : 143 (local)\n  SSL/TLS    : 443\n  SSL/WS     : 443\n  WebSocket  : 80, 8080, 8880, 2082, 2086\n  SlowDNS    : 53/UDP\n  UDP Custom : 50001-65535 (UDP)\n  SocksIP UDP: 1195-3999 (UDP)\n'
+    if [[ -f "$state_dir/vaydns.env" ]]; then
+      source "$state_dir/vaydns.env"
+      printf '  VayDNS     : %s:53 (UDP; TXT; compatibility OFF)\n' "$V6_VAYDNS_DOMAIN"
+      printf '  VayDNS Key : %s\n' "$(cat /etc/frimps-vaydns/server.pub)"
+    fi
     if [[ -s "$state_dir/bhttp.env" ]] && systemctl is-active --quiet frimps-bhttp.service; then
       source "$state_dir/bhttp.env"
       bhttp_ports="${BHTTP_PORTS:-$BHTTP_PORT}"

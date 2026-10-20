@@ -9,6 +9,7 @@ runtime_dir=/usr/local/lib/frimps-v6
 helper_dir=/usr/local/libexec
 install -d -m 755 "$runtime_dir"
 install -m 755 "$script_dir"/*.sh "$runtime_dir/"
+install -m 755 "$script_dir/dns-dispatch.py" "$runtime_dir/"
 # Some systemd units execute immutable helper copies from /usr/local/libexec.
 # Keep the helpers that are direct script copies in sync during a live refresh;
 # otherwise a refreshed menu can still apply obsolete routing or render logic.

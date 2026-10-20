@@ -21,10 +21,10 @@ restart() {
     hcrtls) units='frimps-hcr-tls' ;;
     bhttp) bash "$script_dir/restart-bhttp.sh"; return ;;
     ssh) units='nginx haproxy frimps-v6-dropbear frimps-v6-ssh-backend frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-hcr frimps-hcr-tls frimps-bhttp frimps-bhttp-alt.socket' ;;
-    udp) units='frimps-v6-udp-routing frimps-slowdns hysteria1-server hysteria2-server zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip' ;;
+    udp) units='frimps-v6-udp-routing frimps-slowdns frimps-vaydns frimps-dns-dispatch hysteria1-server hysteria2-server zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip' ;;
     openvpn) units='frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield' ;;
     wireguard) units='frimps-v6-wireguard-nat wg-quick@wg0' ;;
-    all) units='frimps-v6-dropbear frimps-v6-ssh-backend frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-hcr frimps-hcr-tls frimps-bhttp frimps-bhttp-alt.socket frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-slowdns hysteria1-server hysteria2-server zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield wg-quick@wg0 nginx haproxy' ;;
+    all) units='frimps-v6-dropbear frimps-v6-ssh-backend frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-hcr frimps-hcr-tls frimps-bhttp frimps-bhttp-alt.socket frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-slowdns frimps-vaydns frimps-dns-dispatch hysteria1-server hysteria2-server zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield wg-quick@wg0 nginx haproxy' ;;
     *) die 'usage: maintenance-v6.sh restart {ssh|udp|openvpn|wireguard|hcr|hcrtls|bhttp|all}' ;;
   esac
   for unit in $units; do
@@ -39,7 +39,7 @@ restart() {
 }
 backup() {
   stamp="$(date -u +%Y%m%dT%H%M%SZ)"; out="/root/frimps-backup-$stamp.tgz"
-  tar -czf "$out" --ignore-failed-read /etc/slowdns /etc/frimps-v6 /etc/hysteria1 /etc/hysteria2 /etc/zivpn /etc/openvpn /etc/wireguard /etc/systemd/system 2>/dev/null
+  tar -czf "$out" --ignore-failed-read /etc/slowdns /etc/frimps-vaydns /etc/frimps-v6 /etc/hysteria1 /etc/hysteria2 /etc/zivpn /etc/openvpn /etc/wireguard /etc/systemd/system 2>/dev/null
   chmod 600 "$out"; echo "Backup created: $out"
 }
 cleanup_json() {
@@ -72,9 +72,10 @@ logs() {
     hysteria2) unit='hysteria2-server.service' ;;
     wireguard) unit='wg-quick@wg0.service' ;;
     zivpn) unit='zivpn.service' ;;
-    slowdns) unit='frimps-slowdns.service' ;;
+    slowdns) unit='frimps-slowdns.service frimps-dns-dispatch.service' ;;
+    vaydns) unit='frimps-vaydns.service frimps-dns-dispatch.service' ;;
     udpcustom) unit='frimps-udp-custom.service frimps-badvpn.service' ;;
-    *) die 'usage: maintenance-v6.sh logs {ssh|openvpn|hysteria1|hysteria2|wireguard|zivpn|slowdns|udpcustom|socksip|hcr|bhttp}' ;;
+    *) die 'usage: maintenance-v6.sh logs {ssh|openvpn|hysteria1|hysteria2|wireguard|zivpn|slowdns|udpcustom|socksip|hcr|bhttp|vaydns}' ;;
   esac
   for item in $unit; do journal_units+=(-u "$item"); done
   journalctl --no-pager -n 100 "${journal_units[@]}"
