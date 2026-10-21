@@ -64,7 +64,7 @@ show_ports() {
   port_row 'UDPCustom:' '50001-65535 UDP' 'SocksIP:' '1195-3999 UDP'
   port_row 'OpenVPN:' '1194 TCP/UDP' 'OVPN SSL:' '8433'
   port_row 'OVPN WS:' '80,8080,8880,443 TLS' 'WireGuard:' '4000 UDP'
-  port_row 'BHTTP:' "$(if [[ -r "$state_dir/bhttp.env" ]]; then source "$state_dir/bhttp.env"; ports="${BHTTP_PORTS:-$BHTTP_PORT}"; printf '%s TCP' "${ports// /, }"; else printf '90, 8180 TCP'; fi)" 'HCR:' '8881 NTLS / 8444 TLS'
+  port_row 'BHTTP:' "$(if [[ -r "$state_dir/bhttp.env" ]]; then source "$state_dir/bhttp.env"; ports="${BHTTP_PORTS:-$BHTTP_PORT}"; printf '%s TCP' "${ports// /, }"; else printf 'not installed'; fi)" 'HCR:' '8881 NTLS / 8444 TLS'
   printf '%b-------------------------- SYSTEM RESOURCES -------------------------%b\n' "$RED" "$NC"
   printf '  %bRAM Used:%b  %-15s  %bCPU Used:%b  %-13s  %bBuffer:%b  %s\n' "$WHITE" "$NC" "$ram" "$WHITE" "$NC" "$cpu" "$WHITE" "$NC" "$buffer"
   line

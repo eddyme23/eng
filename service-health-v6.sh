@@ -7,7 +7,7 @@ install -d -m 700 "$state"
 exec 9>"$state/run.lock"
 flock -n 9 || exit 0
 now=$(date +%s)
-listener() {
+listener_one() {
   local unit="$1" transport="$2" port="$3" sockets group pid
   sockets=$(ss -H -ln"$transport"p "( sport = :$port )") || return 1
   [[ -n $sockets ]] || return 1
@@ -19,6 +19,14 @@ listener() {
     if grep -Fq -- ":$group" "/proc/$pid/cgroup" 2>/dev/null; then return 0; fi
   done < <(grep -oE 'pid=[0-9]+' <<<"$sockets" | cut -d= -f2)
   return 1
+}
+listener() {
+  local current
+  if [[ $1 == frimps-bhttp.service && ${BHTTP_ENGINE:-} == crisdev ]]; then
+    for current in ${BHTTP_PORTS:-$3}; do listener_one "$1" "$2" "$current" || return 1; done
+    return 0
+  fi
+  listener_one "$@"
 }
 check() {
   local unit="$1" transport="$2" port="$3" failures=0 last=0 healthy=0

@@ -4,6 +4,10 @@ set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo 'Run as root.' >&2; exit 1; }
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 state_dir="${V6_STATE_DIR:-/etc/frimps-v6}"
+if [[ -r "$state_dir/bhttp.env" ]]; then
+  source "$state_dir/bhttp.env"
+  if [[ ${BHTTP_ENGINE:-} == crisdev ]]; then exec bash "$script_dir/apply-bhttp-crisdev.sh"; fi
+fi
 unit=/etc/systemd/system/frimps-bhttp.service
 [[ -f $unit && -s "$state_dir/bhttp.env" ]] || { echo 'Install BHTTP first using bhttp-install.sh.' >&2; exit 1; }
 grep -q '^ExecStart=/opt/frimps-bhttp/bhttp-server ' "$unit" || { echo 'Unrecognized BHTTP unit; no change made.' >&2; exit 1; }
