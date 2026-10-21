@@ -75,9 +75,6 @@ valid_token "$cf_token" || die 'Cloudflare API token is invalid'
 
 slowdns_ns="$(ask 'SlowDNS nameserver' "ns-$domain")"
 valid_host "$slowdns_ns" || die 'SlowDNS nameserver is invalid'
-V6_VAYDNS_DOMAIN="$(ask 'VayDNS tunnel domain (blank = skip)' "${V6_VAYDNS_DOMAIN:-}")"
-if [[ -n $V6_VAYDNS_DOMAIN ]]; then valid_host "$V6_VAYDNS_DOMAIN" || die 'VayDNS domain is invalid'; fi
-export V6_VAYDNS_DOMAIN
 shared_obfs="$(ask 'Shared Hysteria 1 / ZiVPN obfuscation' "${V6_HYSTERIA1_OBFS:-frimps-9d4a7f21}")"
 [[ "$shared_obfs" =~ ^[A-Za-z0-9._-]{1,64}$ ]] || die 'obfuscation is invalid'
 read -r -p 'ZiVPN / Hysteria 1 password (shown while typing; blank = securely generate): ' zivpn_password
@@ -213,7 +210,6 @@ bash "$script_dir/socksip-install.sh"
 if [[ ${V6_INSTALL_BHTTP:-1} == 1 ]]; then bash "$script_dir/bhttp-install.sh"; fi
 if [[ ${V6_INSTALL_HCR:-1} == 1 ]]; then bash "$script_dir/hcr-install.sh"; fi
 if [[ ${V6_INSTALL_HCR_TLS:-1} == 1 ]]; then bash "$script_dir/hcr-tls-install.sh"; fi
-if [[ -n ${V6_VAYDNS_DOMAIN:-} ]]; then bash "$script_dir/vaydns-install.sh" "$V6_VAYDNS_DOMAIN"; fi
 
 # Use the same dedicated backend verified by repeated app reconnects.
 # Preserve an already selected backend when resuming an interrupted install.
@@ -232,7 +228,6 @@ required_units='ssh cron frimps-health.timer certbot.timer frimps-account-cleanu
 if [[ ${V6_INSTALL_BHTTP:-1} == 1 ]]; then required_units+=' frimps-bhttp frimps-bhttp-alt.socket'; fi
 if [[ ${V6_INSTALL_HCR:-1} == 1 ]]; then required_units+=' frimps-hcr'; fi
 if [[ ${V6_INSTALL_HCR_TLS:-1} == 1 ]]; then required_units+=' frimps-hcr-tls'; fi
-if [[ -n ${V6_VAYDNS_DOMAIN:-} ]]; then required_units+=" frimps-vaydns frimps-dns-dispatch"; fi
 failed_units=()
 for unit in $required_units; do
   if ! systemctl is-active --quiet "$unit" || ! systemctl is-enabled --quiet "$unit"; then failed_units+=("$unit"); fi

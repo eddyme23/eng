@@ -40,9 +40,6 @@ if [[ "$mode" == '--live' ]]; then
       printf '%s\n' "$slowdns_output"
     fi
   fi
-  if [[ -f "$state_dir/vaydns.env" ]]; then
-    check_cmd bash "$script_dir/vaydns-audit.sh" --local
-  fi
   if [[ -s "$state_dir/ssh-capacity.env" ]]; then
     check_cmd systemctl is-active --quiet frimps-v6-ssh-backend
     check_listener 2222

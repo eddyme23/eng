@@ -10,18 +10,9 @@ check() { if "$@"; then printf '[OK] %s\n' "$*"; else printf '[FAIL] %s\n' "$*" 
 check systemctl is-enabled --quiet frimps-slowdns.service
 check systemctl is-active --quiet frimps-slowdns.service
 check test -x /etc/slowdns/sldns-server
-command_line="$(systemctl show frimps-slowdns.service -p ExecStart --value)"
-port=53
-if [[ -f $state_dir/vaydns.env ]]; then
-  port=5301
-  check systemctl is-active --quiet frimps-dns-dispatch.service
-  if ss -H -lunp 'sport = :53' | grep -q python3; then echo '[OK] DNS dispatcher owns public UDP 53'; else echo '[FAIL] DNS dispatcher UDP 53 missing'; failed=1; fi
-fi
-if [[ $command_line =~ -udp[[:space:]]+[0-9.]+:$port[[:space:]] && $command_line == *'127.0.0.1:22'* ]]; then
- echo '[OK] SlowDNS endpoint and SSH backend'
-else echo '[FAIL] Unexpected SlowDNS command'; failed=1; fi
-listeners="$(ss -H -lunp "sport = :$port")"
-if [[ $listeners == *sldns-server* ]]; then echo '[OK] SlowDNS owns its UDP backend socket'; else echo '[FAIL] No SlowDNS UDP backend socket' >&2; failed=1; fi
+check grep -Eq -- '-udp [0-9.]+:53 .* 127\.0\.0\.1:22$' /etc/systemd/system/frimps-slowdns.service
+listeners="$(ss -H -lunp 'sport = :53')"
+if [[ $listeners == *sldns-server* ]]; then echo '[OK] SlowDNS owns a UDP 53 socket'; else echo '[FAIL] No SlowDNS UDP 53 socket' >&2; failed=1; fi
 check python3 - <<'PY'
 import socket, subprocess
 from pathlib import Path

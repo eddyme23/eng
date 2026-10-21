@@ -17,13 +17,12 @@ ss -H -lunp 'sport = :53'
 # Probe the address actually configured in the unit. This intentionally invalid
 # base32 tunnel name should elicit a DNS error, without creating an SSH session.
 # A DNS response is not proof of a successful encrypted tunnel.
-if [[ $command_line =~ -udp[[:space:]]+([0-9.]+):([0-9]+) ]]; then
+if [[ $command_line =~ -udp[[:space:]]+([0-9.]+):53 ]]; then
   listen_ip="${BASH_REMATCH[1]}"
-  listen_port="${BASH_REMATCH[2]}"
   tunnel_domain="$(printf '%s\n' "$command_line" | awk '{for(i=1;i<=NF;i++) if($i == "-privkey-file") {print $(i+2); exit}}')"
   if [[ $tunnel_domain =~ ^[A-Za-z0-9.-]+$ ]] && command -v dig >/dev/null; then
     echo '=== Local DNS response probe (NXDOMAIN/FORMERR is expected; timeout is not) ==='
-    dig +time=3 +tries=1 +noall +comments +answer -p "$listen_port" @"$listen_ip" "_eng-audit.$tunnel_domain" TXT
+    dig +time=3 +tries=1 +noall +comments +answer @"$listen_ip" "_eng-audit.$tunnel_domain" TXT
   fi
 fi
 echo "=== Account $account (no password or hash is printed) ==="

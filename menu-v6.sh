@@ -62,7 +62,6 @@ show_ports() {
   port_row 'SSH WS:' '80,8080,8880,2082,2086' 'BadVPN:' '7300'
   port_row 'Hysteria 1:' '20000-50000' 'ZiVPN:' '6000-19999'
   port_row 'UDPCustom:' '50001-65535 UDP' 'SocksIP:' '1195-3999 UDP'
-  if [[ -f "$state_dir/vaydns.env" ]]; then port_row 'SlowDNS:' '53 UDP (shared)' 'VayDNS:' '53 UDP (shared)'; fi
   port_row 'OpenVPN:' '1194 TCP/UDP' 'OVPN SSL:' '8433'
   port_row 'OVPN WS:' '80,8080,8880,443 TLS' 'WireGuard:' '4000 UDP'
   port_row 'BHTTP:' "$(if [[ -r "$state_dir/bhttp.env" ]]; then source "$state_dir/bhttp.env"; ports="${BHTTP_PORTS:-$BHTTP_PORT}"; printf '%s TCP' "${ports// /, }"; else printf '90, 8180 TCP'; fi)" 'HCR:' '8881 NTLS / 8444 TLS'
@@ -84,7 +83,7 @@ status_menu() {
   clear
   menu_title 'FRIMPS SERVICE STATUS'
   echo
-  for unit in ssh cron certbot.timer frimps-account-cleanup.timer frimps-bhttp-alt.socket frimps-v6-ssh-backend frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-hcr frimps-hcr-tls frimps-bhttp frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield hysteria1-server hysteria2-server wg-quick@wg0 frimps-slowdns frimps-vaydns frimps-dns-dispatch zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip nginx haproxy; do
+  for unit in ssh cron certbot.timer frimps-account-cleanup.timer frimps-bhttp-alt.socket frimps-v6-ssh-backend frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-hcr frimps-hcr-tls frimps-bhttp frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield hysteria1-server hysteria2-server wg-quick@wg0 frimps-slowdns zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip nginx haproxy; do
     printf '%-36s %-12s %s\n' "$unit" "$(systemctl is-active "$unit" 2>/dev/null || true)" "$(systemctl is-enabled "$unit" 2>/dev/null || true)"
   done
   echo
@@ -233,10 +232,10 @@ maintenance_menu() {
 protocol_logs_menu() {
   while true; do
     clear; menu_title 'PROTOCOL LOGS (LAST 100 LINES)'
-    item 1 'SSH bridge'; item 2 'OpenVPN transports'; item 3 'Hysteria 1'; item 4 'Hysteria 2'; item 5 'WireGuard'; item 6 'ZiVPN'; item 7 'SlowDNS'; item 8 'UDP Custom / BadVPN'; item 9 'SocksIP UDP'; item 10 'HCR NTLS / TLS'; item 11 'BHTTP'; item 12 'VayDNS / DNS dispatcher'; back_item
+    item 1 'SSH bridge'; item 2 'OpenVPN transports'; item 3 'Hysteria 1'; item 4 'Hysteria 2'; item 5 'WireGuard'; item 6 'ZiVPN'; item 7 'SlowDNS'; item 8 'UDP Custom / BadVPN'; item 9 'SocksIP UDP'; item 10 'HCR NTLS / TLS'; item 11 'BHTTP'; back_item
     read_menu_option x '  ► Option: ' || return
     case "$x" in
-      1) bash "$script_dir/maintenance-v6.sh" logs ssh; pause;; 2) bash "$script_dir/maintenance-v6.sh" logs openvpn; pause;; 3) bash "$script_dir/maintenance-v6.sh" logs hysteria1; pause;; 4) bash "$script_dir/maintenance-v6.sh" logs hysteria2; pause;; 5) bash "$script_dir/maintenance-v6.sh" logs wireguard; pause;; 6) bash "$script_dir/maintenance-v6.sh" logs zivpn; pause;; 7) bash "$script_dir/maintenance-v6.sh" logs slowdns; pause;; 8) bash "$script_dir/maintenance-v6.sh" logs udpcustom; pause;; 9) bash "$script_dir/maintenance-v6.sh" logs socksip; pause;; 10) bash "$script_dir/maintenance-v6.sh" logs hcr; pause;; 11) bash "$script_dir/maintenance-v6.sh" logs bhttp; pause;; 12) bash "$script_dir/maintenance-v6.sh" logs vaydns; pause;; 0) return;; *) printf '%bInvalid option.%b\n' "$RED" "$NC"; sleep 1;;
+      1) bash "$script_dir/maintenance-v6.sh" logs ssh; pause;; 2) bash "$script_dir/maintenance-v6.sh" logs openvpn; pause;; 3) bash "$script_dir/maintenance-v6.sh" logs hysteria1; pause;; 4) bash "$script_dir/maintenance-v6.sh" logs hysteria2; pause;; 5) bash "$script_dir/maintenance-v6.sh" logs wireguard; pause;; 6) bash "$script_dir/maintenance-v6.sh" logs zivpn; pause;; 7) bash "$script_dir/maintenance-v6.sh" logs slowdns; pause;; 8) bash "$script_dir/maintenance-v6.sh" logs udpcustom; pause;; 9) bash "$script_dir/maintenance-v6.sh" logs socksip; pause;; 10) bash "$script_dir/maintenance-v6.sh" logs hcr; pause;; 11) bash "$script_dir/maintenance-v6.sh" logs bhttp; pause;; 0) return;; *) printf '%bInvalid option.%b\n' "$RED" "$NC"; sleep 1;;
     esac
   done
 }
@@ -254,7 +253,7 @@ while true; do
   clear
   show_ports
   echo
-  item 1 'SSH Account Management (SSH / SlowDNS / VayDNS / UDP Custom / SocksIP)'
+  item 1 'SSH Account Management (SSH / SlowDNS / UDP Custom / SocksIP)'
   item 2 'Hysteria 1 Account Management (UDP)'
   item 3 'Hysteria 2 Account Management (UDP)'
   item 4 'WireGuard Account Management (UDP)'

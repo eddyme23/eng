@@ -43,10 +43,8 @@ systemctl enable --now frimps-slowdns.service
 # --now does not reload a running service after its unit changes.
 systemctl restart frimps-slowdns.service
 systemctl is-active --quiet frimps-slowdns.service
-slowdns_port=53
-[[ ! -f "$state_dir/vaydns.env" ]] || slowdns_port=5301
 for attempt in {1..20}; do
-  ss -H -lunp "sport = :${slowdns_port:-53}" | grep -q sldns-server && break
+  ss -H -lunp 'sport = :53' | grep -q sldns-server && break
   sleep 0.25
 done
 bash "$script_dir/slowdns-audit.sh" --local

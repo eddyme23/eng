@@ -25,7 +25,7 @@ Unit=frimps-health.service
 WantedBy=timers.target
 UNIT
 # Per-service journal rate limits retain diagnostics without changing global logs.
-for unit in frimps-v6-tlsmux frimps-v6-payloadgate frimps-v6-sshws frimps-slowdns frimps-vaydns frimps-dns-dispatch hysteria1-server hysteria2-server zivpn frimps-udp-custom frimps-socksip frimps-hcr frimps-hcr-tls frimps-bhttp; do
+for unit in frimps-v6-tlsmux frimps-v6-payloadgate frimps-v6-sshws frimps-slowdns hysteria1-server hysteria2-server zivpn frimps-udp-custom frimps-socksip frimps-hcr frimps-hcr-tls frimps-bhttp; do
   systemctl cat "$unit" >/dev/null 2>&1 || continue
   install -d -m 755 "/etc/systemd/system/$unit.service.d"
   printf '[Service]\nLogRateLimitIntervalSec=30s\nLogRateLimitBurst=1000\n' >"/etc/systemd/system/$unit.service.d/70-frimps-log-limits.conf"
