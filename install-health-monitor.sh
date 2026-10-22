@@ -3,7 +3,9 @@ set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo 'run as root' >&2; exit 1; }
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 install -d -m 755 /usr/local/lib/frimps-v6
-install -m 755 "$script_dir/service-health-v6.sh" /usr/local/lib/frimps-v6/service-health-v6.sh
+if [[ ! "$script_dir/service-health-v6.sh" -ef /usr/local/lib/frimps-v6/service-health-v6.sh ]]; then
+  install -m 755 "$script_dir/service-health-v6.sh" /usr/local/lib/frimps-v6/service-health-v6.sh
+fi
 cat >/etc/systemd/system/frimps-health.service <<'UNIT'
 [Unit]
 Description=Frimps guarded local service health checks

@@ -58,5 +58,22 @@ test "$restarts" = 2
         self.assertNotIn('"$0" delete', source)
         self.assertIn('delete_peer_account "$name"', source)
 
+    def test_health_installer_does_not_copy_runtime_file_onto_itself(self):
+        source = (ROOT / "install-health-monitor.sh").read_text(encoding="utf-8")
+        start = source.index('if [[ ! "$script_dir/service-health-v6.sh"')
+        block = source[start:source.index('fi\n', start)+3]
+        # Substitute the runtime directory with the fixture, keeping the actual guard.
+        block = block.replace('/usr/local/lib/frimps-v6/service-health-v6.sh', '$target')
+        setup = r'''
+set -eu
+fixture=$(mktemp -d)
+trap 'rm -rf "$fixture"' EXIT
+script_dir="$fixture"; target="$fixture/service-health-v6.sh"
+touch "$target"
+install() { echo copied >> "$fixture/copies"; }
+'''
+        result = subprocess.run([BASH, "-c", setup + block + '\ntest ! -f "$fixture/copies"'], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+
 if __name__ == "__main__":
     unittest.main()

@@ -8,8 +8,10 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 runtime_dir=/usr/local/lib/frimps-v6
 helper_dir=/usr/local/libexec
 install -d -m 755 "$runtime_dir"
-install -m 755 "$script_dir"/*.sh "$runtime_dir/"
-install -m 755 "$script_dir/bhttp-probe.py" "$runtime_dir/"
+for source_file in "$script_dir"/*.sh "$script_dir/bhttp-probe.py"; do
+  destination="$runtime_dir/${source_file##*/}"
+  if [[ ! "$source_file" -ef "$destination" ]]; then install -m 755 "$source_file" "$destination"; fi
+done
 # Some systemd units execute immutable helper copies from /usr/local/libexec.
 # Keep the helpers that are direct script copies in sync during a live refresh;
 # otherwise a refreshed menu can still apply obsolete routing or render logic.
