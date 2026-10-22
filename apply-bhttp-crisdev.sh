@@ -112,7 +112,12 @@ if [[ ! -e $binary ]]; then
 else systemd-analyze verify "$tmp/frimps-bhttp.service"; fi
 install -d -m 700 "$base"
 backup=$(mktemp -d "$base/$(date -u +%Y%m%dT%H%M%SZ)-XXXXXXXX")
-for file in "${files[@]}"; do [[ ! -f $file ]] || cp --parents -a "$file" "$backup/"; done
+for file in "${files[@]}"; do
+ if [[ -f $file ]]; then
+  install -d -m 700 "$backup$(dirname "$file")"
+  cp -a "$file" "$backup$file"
+ fi
+done
 for item in "${units[@]}"; do
  systemctl is-enabled --quiet "$item" && touch "$backup/$item.enabled" || true
  systemctl is-active --quiet "$item" && touch "$backup/$item.active" || true

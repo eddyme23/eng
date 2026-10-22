@@ -2,6 +2,7 @@ import os
 import shutil
 import subprocess
 import unittest
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -68,10 +69,10 @@ set -euo pipefail
 root=$(mktemp -d)
 trap 'rm -rf "$root"' EXIT
 script_dir="$root/scripts"; state_dir="$root/state"; base="$root/backups"
-unit="$root/unit"; binary="$root/binary"; socket_unit="$root/socket"; proxy_unit="$root/proxy"
+unit="$root/etc/systemd/system/frimps-bhttp.service"; binary="$root/opt/frimps-bhttp/bhttp-server"; socket_unit="$root/etc/systemd/system/frimps-bhttp-alt.socket"; proxy_unit="$root/etc/systemd/system/frimps-bhttp-alt.service"
 files=("$unit" "$binary" "$state_dir/bhttp.env" "$socket_unit" "$proxy_unit")
 units=(frimps-bhttp.service frimps-bhttp-alt.socket frimps-bhttp-alt.service)
-mkdir -p "$script_dir" "$state_dir"
+mkdir -p "$script_dir" "$state_dir" "$(dirname "$unit")" "$(dirname "$binary")"
 printf 'ExecStart=/opt/frimps-bhttp/bhttp-server --port 90\n' > "$unit"
 printf 'legacy engine' > "$binary"
 printf 'Description=Frimps BHTTP alternate port socket\nlegacy socket' > "$socket_unit"
@@ -102,12 +103,16 @@ set -e
 test "$result" = 1
 test -f "$root/attempted"
 test "$(cat "$binary")" = 'legacy engine'
+grep -q -- '--port 90' "$unit"
 grep -q 'legacy socket' "$socket_unit"
 grep -q 'legacy proxy' "$proxy_unit"
 grep -q 'BHTTP_PORTS="90 8180"' "$state_dir/bhttp.env"
 grep -q 'start frimps-bhttp-alt.socket' "$root/calls"
 '''
-        result = subprocess.run([BASH, '-c', setup + source + assertions], capture_output=True, text=True)
+        with tempfile.TemporaryDirectory() as directory:
+            script = Path(directory) / 'migration.sh'
+            script.write_bytes((setup + source + assertions).encode('utf-8'))
+            result = subprocess.run([BASH, str(script)], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 

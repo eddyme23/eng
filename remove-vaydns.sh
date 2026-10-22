@@ -22,7 +22,10 @@ grep -Eq '^ExecStart=.*-udp [0-9.]+:53 .*127\.0\.0\.1:22$' "$unit_dir/frimps-slo
 }
 backup=$(mktemp -d /var/backups/frimps-v6/remove-vaydns-XXXXXXXX)
 for file in "$slow_override" "$state_dir/vaydns.env" "$state_dir/dns-dispatch.json"; do
- if [[ -f $file ]]; then cp --parents -a "$file" "$backup/"; fi
+ if [[ -f $file ]]; then
+  install -d -m 700 "$backup$(dirname "$file")"
+  cp -a "$file" "$backup$file"
+ fi
 done
 units=(frimps-vaydns.service frimps-dns-dispatch.service)
 for unit in "${units[@]}"; do
