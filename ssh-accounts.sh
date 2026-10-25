@@ -22,11 +22,29 @@ fi
 die() { echo "v6 SSH accounts: $*" >&2; exit 1; }
 [[ "${EUID}" -eq 0 ]] || die "run as root"
 command -v jq >/dev/null 2>&1 || die "jq is required"
+command -v python3 >/dev/null 2>&1 || die "python3 is required"
 install -d -m 700 "$state_dir"
 [[ -s "$store" ]] || printf '[]\n' > "$store"
 jq -e 'type == "array"' "$store" >/dev/null || die "invalid managed SSH account store"
 
-valid_user() { [[ "$1" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; }
+valid_user() { [[ "$1" =~ ^[a-z0-9_][a-z0-9_-]{0,31}$ ]]; }
+account_uid_by_name() {
+  # Numeric login names must never fall back to a different account's UID.
+  python3 - "$1" <<'PYUSER'
+import pwd, sys
+try:
+    print(pwd.getpwnam(sys.argv[1]).pw_uid)
+except KeyError:
+    sys.exit(3)
+PYUSER
+}
+create_system_account() {
+  local name="$1"
+  local -a flags=()
+  valid_user "$name" || return 1
+  [[ $name != [0-9]* ]] || flags+=(--badname)
+  useradd "${flags[@]}" -m -s /bin/bash "$name"
+}
 valid_days() { [[ "$1" =~ ^[1-9][0-9]*$ ]]; }
 valid_ipv4() {
   local value="$1" IFS=. octet
@@ -50,8 +68,12 @@ managed() { jq -e --arg name "$1" '.[] | select(.name == $name)' "$store" >/dev/
 delete_system_account() {
   local name="$1" account_uid attempt
   valid_user "$name" || { echo 'Invalid managed username.' >&2; return 1; }
-  id "$name" >/dev/null 2>&1 || return 0
-  account_uid="$(id -u "$name")" || return 1
+  account_uid="$(account_uid_by_name "$name")" || {
+    local lookup_status=$?
+    [[ $lookup_status -eq 3 ]] && return 0
+    return 1
+  }
+  [[ $account_uid =~ ^[0-9]+$ ]] || return 1
   # Never terminate root or system-account processes, even if metadata is damaged.
   ((account_uid >= 1000 && account_uid != 65534)) || { echo 'Refusing to delete a system account.' >&2; return 1; }
   command -v pkill >/dev/null && command -v pgrep >/dev/null || { echo 'procps is required to close account sessions.' >&2; return 1; }
@@ -105,12 +127,17 @@ case "$action" in
   create)
     valid_days "$days" || die "days must be a positive integer"
     managed "$user" && die "account already managed by v6"
-    id "$user" >/dev/null 2>&1 && die "a Linux user with this name already exists"
+    if account_uid_by_name "$user" >/dev/null; then
+      die "a Linux user with this name already exists"
+    else
+      lookup_status=$?
+      [[ $lookup_status -eq 3 ]] || die "Linux account lookup failed"
+    fi
     read -r -p "Password for $user: " password
     [[ -n "$password" ]] || die "empty passwords are not allowed"
     expiry="$(date -u -d "+$days days" +%F)"
     hash="$(printf '%s' "$password" | openssl passwd -6 -stdin)"
-    useradd -m -s /bin/bash "$user"
+    create_system_account "$user"
     if ! usermod -p "$hash" "$user" || ! chage -E "$expiry" "$user"; then
       userdel -r "$user" || true
       die "account creation failed and was rolled back"
