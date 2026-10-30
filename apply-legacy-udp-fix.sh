@@ -33,4 +33,4 @@ systemctl enable --now frimps-firewall-migration.service
 systemctl restart frimps-firewall-migration.service
 echo "Removed matching legacy catch-all rules. Firewall backup: $backup"
 echo 'Reconnect the app to create a new UDP flow; existing NAT mappings can remain until they expire.'
-echo 'Recheck France with bash ./slowdns-audit.sh and a client connection.'
+echo 'Recheck this server with bash ./slowdns-audit.sh and a client connection.'

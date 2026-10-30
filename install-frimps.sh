@@ -222,6 +222,11 @@ systemctl enable --now frimps-v6-ssh-backend.service
 note 'Enabling every installed Frimps service for this boot and future boots'
 bash "$script_dir/refresh-menu-v6.sh"
 systemctl enable --now certbot.timer
+# UDP Custom may create legacy catch-all NAT rules when its backend starts.
+# Retire them only after all native replacements and backends are running,
+# and install the same ordered cleanup for subsequent boots.
+note 'Removing conflicting legacy UDP rules after service startup'
+bash "$script_dir/apply-legacy-udp-fix.sh"
 bash "$script_dir/postflight-v6.sh"
 
 required_units='ssh cron frimps-health.timer certbot.timer frimps-account-cleanup.timer frimps-v6-ssh-backend frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield hysteria1-server hysteria2-server wg-quick@wg0 frimps-slowdns zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip nginx haproxy'
@@ -229,6 +234,7 @@ if [[ ${V6_INSTALL_BHTTP:-1} == 1 ]]; then required_units+=' frimps-bhttp'; fi
 if [[ ${V6_INSTALL_HCR:-1} == 1 ]]; then required_units+=' frimps-hcr'; fi
 if [[ ${V6_INSTALL_HCR_TLS:-1} == 1 ]]; then required_units+=' frimps-hcr-tls'; fi
 failed_units=()
+required_units+=' frimps-firewall-migration'
 for unit in $required_units; do
   if ! systemctl is-active --quiet "$unit" || ! systemctl is-enabled --quiet "$unit"; then failed_units+=("$unit"); fi
 done

@@ -3,6 +3,7 @@
 # intentionally read-only, except that it prints the relevant diagnostics.
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo 'run as root' >&2; exit 1; }
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 failed=0
 service_check() {
@@ -50,6 +51,9 @@ fi
 config_check grep -qx 'TIMEOUTclose = 0' /etc/openvpn/frimps-stunnel.conf
 config_check test "$(sysctl -n net.ipv4.ip_forward 2>/dev/null || true)" = 1
 config_check nft list table ip frimps_v6_ovpn
+# A listening UDP socket can still be shadowed by another NAT base chain.
+# Include the routing/key/backend audit before declaring installation healthy.
+config_check bash "$script_dir/slowdns-audit.sh" --local
 domain="$(jq -r '.primaryDomain // empty' /etc/frimps-v6/routes.json 2>/dev/null || true)"
 if [[ -n "$domain" ]] && getent ahostsv6 "$domain" 2>/dev/null | grep -q .; then
   printf '[warn] %s publishes IPv6; keep UDP range protocol clients on its IPv4 A record until IPv6 UDP routing is configured.\n' "$domain" >&2
