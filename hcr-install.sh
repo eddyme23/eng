@@ -28,6 +28,8 @@ for cmd in ss sha256sum systemctl systemd-analyze install; do command -v "$cmd" 
 [[ -f $source_binary && ! -L $source_binary ]] || { echo "HCR download did not produce a regular binary file." >&2; exit 1; }
 actual_sha=$(sha256sum -- "$source_binary"); actual_sha=${actual_sha%% *}
 [[ $actual_sha == "$expected_sha" ]] || { echo 'Binary checksum differs from the supplied HCR release; installation stopped.' >&2; exit 1; }
+chmod 700 "$source_binary"
+hcr_options=$(HCR_MAX_DOWNLOAD_FRAME="$frame" HCR_DOWNLOAD_POLL_TIMEOUT="$poll" python3 "$script_dir/hcr-settings.py" --binary "$source_binary")
 [[ -z $(ss -H -ltn "sport = :$port") ]] || { echo "TCP $port is occupied; no service was changed." >&2; exit 1; }
 [[ -n $(ss -H -ltn 'sport = :22') ]] || { echo 'OpenSSH must be listening on TCP 22.' >&2; exit 1; }
 unit=/etc/systemd/system/frimps-hcr.service
@@ -48,7 +50,7 @@ StartLimitBurst=3
 Type=exec
 User=root
 WorkingDirectory=/opt/frimps-hcr
-ExecStart=/opt/frimps-hcr/hcr-server --listen :$port --target 127.0.0.1:22 --transport plain --max-download-frame $frame --download-poll-timeout $poll
+ExecStart=/opt/frimps-hcr/hcr-server --listen :$port --target 127.0.0.1:22 --transport plain $hcr_options
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=15s

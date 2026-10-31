@@ -8,7 +8,7 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 runtime_dir=/usr/local/lib/frimps-v6
 helper_dir=/usr/local/libexec
 install -d -m 755 "$runtime_dir"
-for source_file in "$script_dir"/*.sh "$script_dir/bhttp-probe.py"; do
+for source_file in "$script_dir"/*.sh "$script_dir"/*.py; do
   destination="$runtime_dir/${source_file##*/}"
   if [[ ! "$source_file" -ef "$destination" ]]; then install -m 755 "$source_file" "$destination"; fi
 done

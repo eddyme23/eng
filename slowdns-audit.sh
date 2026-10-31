@@ -5,14 +5,14 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 [[ $EUID -eq 0 ]] || { echo 'Run as root.' >&2; exit 1; }
 [[ $# == 0 || ( $# == 1 && $1 == --local ) ]] || { echo 'Use without arguments, or --local to skip public DNS queries.' >&2; exit 1; }
 state_dir="${V6_STATE_DIR:-/etc/frimps-v6}"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 failed=0
 check() { if "$@"; then printf '[OK] %s\n' "$*"; else printf '[FAIL] %s\n' "$*" >&2; failed=1; fi; }
 check systemctl is-enabled --quiet frimps-slowdns.service
 check systemctl is-active --quiet frimps-slowdns.service
 check test -x /etc/slowdns/sldns-server
 check grep -Eq -- '-udp [0-9.]+:53 .* 127\.0\.0\.1:22$' /etc/systemd/system/frimps-slowdns.service
-listeners="$(ss -H -lunp 'sport = :53')"
-if [[ $listeners == *sldns-server* ]]; then echo '[OK] SlowDNS owns a UDP 53 socket'; else echo '[FAIL] No SlowDNS UDP 53 socket' >&2; failed=1; fi
+check python3 "$script_dir/slowdns-network.py" check
 check python3 - <<'PY'
 import socket, subprocess
 from pathlib import Path
