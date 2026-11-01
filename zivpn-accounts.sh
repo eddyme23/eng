@@ -70,6 +70,6 @@ case "$action" in
     valid_password "$password" || die 'invalid password/username'; jq -e --arg p "$password" '.[] | select(.password == $p)' "$store" >/dev/null || die 'account does not exist'
     tmp="$(mktemp "$state_dir/.zivpn-users.XXXXXX")"; jq --arg p "$password" 'map(select(.password != $p))' "$store" > "$tmp"; commit "$tmp"; render; echo 'ZiVPN account deleted'
     ;;
-  list) jq -r '.[] | [.password,.expiresAt] | @tsv' "$store" | column -t -N PASSWORD,EXPIRES ;;
+  list) jq -r '.[] | [.password,.expiresAt] | @tsv' "$store" | ui_table PASSWORD,EXPIRES ;;
   *) die 'usage: zivpn-accounts.sh {create PASSWORD DAYS|renew PASSWORD DAYS|delete PASSWORD|list}' ;;
 esac

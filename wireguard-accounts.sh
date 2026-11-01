@@ -4,6 +4,7 @@
 set -euo pipefail
 
 state_dir="${V6_STATE_DIR:-/etc/frimps-v6}"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/ui-v6.sh"
 # Serialize the complete read/modify/render transaction, including expiry jobs.
 [[ $EUID -eq 0 ]] || { echo 'run as root' >&2; exit 1; }
 install -d -m 700 "$state_dir"
@@ -131,7 +132,7 @@ case "$action" in
     public="$(jq -r '.publicKey' <<<"$row")"; ip="$(jq -r '.ip' <<<"$row")"; rewrite_config "$name" "$public" "$ip" "$expires"
     commit_store "$(jq --arg n "$name" --arg e "$expires" 'map(if .name == $n then .expiresAt = $e else . end)' "$store")"; sync_live; echo "Renewed $name through $expires" ;;
   delete) delete_peer_account "${2:-}" ;;
-  list) jq -r '.[] | [.name,.ip,.expiresAt] | @tsv' "$store" | column -t -N NAME,ADDRESS,EXPIRES ;;
+  list) jq -r '.[] | [.name,.ip,.expiresAt] | @tsv' "$store" | ui_table NAME,ADDRESS,EXPIRES ;;
   config) name="${2:-}"; [[ -f "$client_dir/$name.conf" ]] || die 'account/config not found'; cat "$client_dir/$name.conf" ;;
   link) name="${2:-}"; [[ -f "$client_dir/$name.conf" ]] || die 'account/config not found'; wireguard_link "$name" ;;
   migrate-dns) migrate_dns ;;

@@ -10,3 +10,26 @@ ui_line() { printf '%b═══════════════════�
 ui_success_title() { printf '\n%b══════════════════════════════════════════════════════════════%b\n' "$UI_GREEN" "$UI_NC"; printf '                   %b%s%b\n' "$UI_BOLD" "$1" "$UI_NC"; printf '%b══════════════════════════════════════════════════════════════%b\n' "$UI_GREEN" "$UI_NC"; }
 ui_kv() { printf '  %b%-14s%b %b%s%b\n' "$UI_WHITE" "$1:" "$UI_NC" "$UI_YELLOW" "$2" "$UI_NC"; }
 ui_rule() { printf '%b--------------------------------------------------------------%b\n' "$UI_CYAN" "$UI_NC"; }
+# Format tab-separated rows without the optional util-linux column package.
+# Buffer rows so long usernames/addresses align; show headers for an empty store.
+ui_table() {
+  awk -F '\t' -v headers="$1" '
+    BEGIN {
+      columns=split(headers, labels, ",")
+      for (i=1; i<=columns; i++) { cells[0,i]=labels[i]; width[i]=length(labels[i]) }
+    }
+    {
+      for (i=1; i<=columns; i++) {
+        cells[NR,i]=$i
+        if (length($i)>width[i]) width[i]=length($i)
+      }
+    }
+    END {
+      for (row=0; row<=NR; row++) {
+        for (i=1; i<=columns; i++) {
+          if (i<columns) printf "%-*s  ", width[i], cells[row,i]
+          else printf "%s\n", cells[row,i]
+        }
+      }
+    }'
+}
