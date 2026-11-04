@@ -119,8 +119,10 @@ for file in "${files[@]}"; do
  fi
 done
 for item in "${units[@]}"; do
- systemctl is-enabled --quiet "$item" && touch "$backup/$item.enabled" || true
- systemctl is-active --quiet "$item" && touch "$backup/$item.active" || true
+ if systemctl cat "$item" >/dev/null 2>&1; then
+  systemctl is-enabled --quiet "$item" && touch "$backup/$item.enabled" || true
+  systemctl is-active --quiet "$item" && touch "$backup/$item.active" || true
+ fi
 done
 printf 'ENG BHTTP CRISDEV migration\n' > "$backup/manifest"
 recover() {
@@ -143,7 +145,7 @@ install -m 644 "$tmp/frimps-bhttp.service" "$unit"
 } > "$state_dir/bhttp.env"
 chmod 600 "$state_dir/bhttp.env"
 systemctl daemon-reload
-systemctl reset-failed frimps-bhttp.service || true
+systemctl reset-failed frimps-bhttp.service 2>/dev/null || true
 systemctl enable frimps-bhttp.service
 systemctl restart frimps-bhttp.service
 ready=false

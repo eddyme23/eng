@@ -9,9 +9,21 @@ nft list table ip frimps_socksip >/dev/null
 backup="/var/backups/frimps-v6/legacy-udp-$(date -u +%Y%m%dT%H%M%SZ)"
 install -d -m 700 "$backup"
 umask 077
-nft list ruleset > "$backup/nftables.rules"
+snapshot() {
+ local tool="$1" destination="$2" status=0
+ shift 2
+ "$tool" "$@" > "$destination" 2> "$destination.stderr" || status=$?
+ if [[ -s "$destination.stderr" ]]; then
+  sed "s/^/[$tool snapshot, exit $status] /" "$destination.stderr" >&2
+ fi
+ if ((status)); then
+  echo "Firewall snapshot failed for $tool; cleanup has not started. Backup: $backup" >&2
+  return "$status"
+ fi
+}
+snapshot nft "$backup/nftables.rules" list ruleset
 for tool in iptables-save iptables-legacy-save ip6tables-save ip6tables-legacy-save; do
- if command -v "$tool" >/dev/null; then "$tool" > "$backup/$tool.rules"; fi
+ if command -v "$tool" >/dev/null; then snapshot "$tool" "$backup/$tool.rules"; fi
 done
 install -m 700 "$script_dir/retire-iptables-rules.sh" /usr/local/libexec/frimps-retire-iptables-rules
 bash "$script_dir/retire-iptables-rules.sh"

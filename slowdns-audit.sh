@@ -78,7 +78,15 @@ if [[ ${1:-} != --local ]]; then
     echo '[FAIL] Configure V6_SLOWDNS_NS and install dnsutils to inspect delegation' >&2; failed=1
   fi
 fi
-journalctl -u frimps-slowdns.service -n 20 --no-pager || true
+if recent_logs=$(journalctl -b -u frimps-slowdns.service --since '5 minutes ago' -n 200 --no-pager -o cat); then
+  printf '%s\n' "$recent_logs" | tail -n 20
+  printf '%s\n' "$recent_logs" | python3 "$script_dir/slowdns-log-summary.py"
+else
+  echo '[WARN] Recent SlowDNS logs unavailable; response-size and stream activity could not be inspected.' >&2
+fi
+if ((failed == 0)); then
+  echo '[INFO] Local SlowDNS checks passed. End-to-end tunnel, SSH login and browsing remain unverified.'
+fi
 echo 'Use the displayed DNS public key, the delegated tunnel domain, and a valid SSH account.'
 echo 'DNS NS targets must resolve to the VPS public IPv4. Provider/host firewalls must allow inbound UDP 53.'
 echo 'These checks do not establish a successful DNS tunnel, SSH password login, or client browsing.'

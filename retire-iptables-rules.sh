@@ -5,6 +5,12 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 [[ $EUID -eq 0 ]] || exit 1
 iface="${V6_PUBLIC_INTERFACE:-$(ip -4 route show default | awk '/default/ {print $5; exit}')}"
 [[ "$iface" =~ ^[A-Za-z0-9_.:-]+$ ]] || exit 1
+firewall_change() {
+ local status=0
+ "$tool" "$@" 2> >(sed "s/^/[$tool change] /" >&2) || status=$?
+ if ((status)); then printf '[fail] Firewall change failed using %s (exit %s); inspect the saved firewall and this backend.\n' "$tool" "$status" >&2; fi
+ return "$status"
+}
 # Native replacement must be installed before legacy UDP ingress is retired.
 nft list table ip frimps_v6_udp >/dev/null
 nft list table ip frimps_socksip >/dev/null
@@ -12,21 +18,22 @@ nft list table ip frimps_socksip >/dev/null
 # Delete only the exact backend/range/interface after native replacement exists.
 for tool in iptables iptables-legacy ip6tables ip6tables-legacy; do
  command -v "$tool" >/dev/null 2>&1 || continue
+ printf '[info] Inspecting catch-all rules using %s\n' "$tool"
  while "$tool" -t nat -C PREROUTING -i "$iface" -p udp --dport 1:65535 -j DNAT --to-destination :36717 2>/dev/null; do
-  "$tool" -t nat -D PREROUTING -i "$iface" -p udp --dport 1:65535 -j DNAT --to-destination :36717
+  firewall_change -t nat -D PREROUTING -i "$iface" -p udp --dport 1:65535 -j DNAT --to-destination :36717
  done
 done
 for tool in iptables iptables-legacy; do
  command -v "$tool" >/dev/null 2>&1 || continue
- del() { local table="$1"; shift; while "$tool" -t "$table" -C "$@" 2>/dev/null; do "$tool" -t "$table" -D "$@"; done; }
+ del() { local table="$1"; shift; while "$tool" -t "$table" -C "$@" 2>/dev/null; do firewall_change -t "$table" -D "$@"; done; }
  del nat PREROUTING -i "$iface" -p udp -j V6_UDP_INGRESS
  # Do not flush a chain still referenced by another interface.
  if "$tool" -t nat -S 2>/dev/null | grep -q -- '-j V6_UDP_INGRESS'; then
    echo 'Legacy UDP chain still referenced; retaining it for the other interface.' >&2
  else
    if "$tool" -t nat -S V6_UDP_INGRESS >/dev/null 2>&1; then
-     "$tool" -t nat -F V6_UDP_INGRESS
-     "$tool" -t nat -X V6_UDP_INGRESS
+     firewall_change -t nat -F V6_UDP_INGRESS
+     firewall_change -t nat -X V6_UDP_INGRESS
    fi
  fi
  del nat POSTROUTING -s 169.254.240.2/32 -o "$iface" -j MASQUERADE
