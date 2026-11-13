@@ -105,4 +105,3 @@ python3() { printf 'BUILD %s\\n' "$*"; }
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(b'--implementation upstream-20260501', result.stdout)
         self.assertIn(b'--target linux-amd64', result.stdout)
-
