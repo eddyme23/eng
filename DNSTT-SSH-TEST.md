@@ -1,8 +1,20 @@
-# Opt-in upstream DNSTT + SSH comparison
+# Upstream DNSTT + SSH: production default and comparison tools
 
-This path is separate from `install-frimps.sh`, `slowdns-install.sh` and the
-ePro binary updater. No default backend changes. It installs no SlipGate
-manager, SOCKS server, DNS router, Xray, Reality or VayDNS.
+Fresh installations use this pinned upstream engine through `slowdns-install.sh`.
+Existing servers can run `bash ./slowdns-install.sh` for the same build and
+transactional activation with backup. The installer uses an isolated, checksum-
+verified Go 1.27.4 toolchain under `/opt/frimps-go-1.27.4`; system Go is unchanged.
+The official compiler checksum is pinned from https://go.dev/dl/?mode=json.
+Source/dependency downloads are disabled during compilation. The first install
+needs network access for the compiler archive and time/RAM to compile it.
+
+The old SLDNS download and ePro SlowDNS upgrade have been retired. HCR is
+unchanged. Existing ePro backups can still be restored. Diagnostic, key,
+MTU and network helpers remain relevant and are retained. No SlipGate manager,
+SOCKS server, DNS router, Xray, Reality or independent VayDNS server is installed.
+
+The isolated stage/activate commands below remain available for manual comparisons.
+Fresh installs create only the production SlowDNS service, enabled for boot.
 
 ## Which implementation
 
@@ -147,7 +159,7 @@ authentication, VPN routes, browsing, speed or every TG native engine.
 
 ## Explicit production activation and rollback
 
-Only after the candidate comparison succeeds and the operator chooses it:
+Only after the candidate comparison succeeds and the operator chooses it (also used by existing-server installation):
 
 ```bash
 bash ./dnstt-ssh.sh activate --implementation upstream-20260501 --backend ssh
@@ -175,9 +187,9 @@ unexpected manifest destinations, and verifies saved file checksums before
 stopping any service. A first-stage rollback removes created test
 files and leaves production alone. Roll back multiple changes in reverse
 order; do not mix this and ePro activation without recording each backup.
-The baseline SlowDNS installer and ePro updater share the production executable
-slot. Rerunning either can replace this selected candidate; inspect the actual
-executable hash rather than relying on a stale backend record.
+The SlowDNS installer now builds this same pinned engine. The retired ePro
+SlowDNS updater cannot overwrite it. Inspect the running binary hash when
+comparing manual rollbacks or custom service modifications.
 
 ## Validation limits
 
@@ -202,8 +214,9 @@ ENG's server implementation. VayDNS DoH was slower in the reported samples.
 
 Still pending: 15–30 minute sessions, the earlier connected-but-stalled
 condition, recovery after a complete network outage without mobile fallback,
-and sustained browser/media tests. Keep this upgrade opt-in until those pass.
-No new fresh-install default or independent VayDNS service is introduced.
+and sustained browser/media tests. The operator selected this engine as the fresh-install default after the live
+comparison. These remaining app/resolver acceptance tests still apply; no
+independent VayDNS service is introduced.
 
 ### Local validation
 

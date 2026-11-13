@@ -12,6 +12,11 @@ for source_file in "$script_dir"/*.sh "$script_dir"/*.py; do
   destination="$runtime_dir/${source_file##*/}"
   if [[ ! "$source_file" -ef "$destination" ]]; then install -m 755 "$source_file" "$destination"; fi
 done
+# The SlowDNS builder validates these pinned inputs relative to its own path.
+# Keep the installed menu's installer usable without the original checkout.
+install -d -m 755 "$runtime_dir/dnstt-source"
+install -m 644 "$script_dir/dnstt-source/pin.json" "$runtime_dir/dnstt-source/pin.json"
+install -m 644 "$script_dir/dnstt-source/upstream-20260501.tar.gz" "$runtime_dir/dnstt-source/upstream-20260501.tar.gz"
 # Some systemd units execute immutable helper copies from /usr/local/libexec.
 # Keep the helpers that are direct script copies in sync during a live refresh;
 # otherwise a refreshed menu can still apply obsolete routing or render logic.

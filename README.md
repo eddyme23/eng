@@ -38,10 +38,11 @@ bash ./install-frimps.sh
 
 Menu: `frimps-v6-menu` or `menu`.
 
-## Optional upstream DNSTT upgrade
+## SlowDNS engine
 
 See [DNSTT + SSH setup and rollback](DNSTT-SSH-TEST.md) for the pinned,
-source-built upstream candidate. It supports existing SlowDNS credentials
+source-built upstream DNSTT engine used by fresh installs. It supports existing SlowDNS credentials
 and clients using UDP, DoH or DoT recursive resolvers. VayDNS clients require
 DNSTT compatibility mode; no separate VayDNS server is installed.
-This is an explicit opt-in upgrade, separate from the fresh installer.
+Run `bash ./slowdns-install.sh` to upgrade an existing server with backup and
+rollback. Existing domain, keys and SSH credentials are preserved.

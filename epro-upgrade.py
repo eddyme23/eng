@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Transactional opt-in upgrade of installed ENG HCR or SlowDNS servers."""
+"""Transactional HCR upgrade; retain historical SlowDNS backup restore support."""
 import argparse
 import hashlib
 import importlib.util
@@ -17,8 +17,8 @@ import time
 ROOT = Path(__file__).resolve().parent
 BACKUPS = Path('/var/backups/frimps-v6/epro')
 UNIT_DIR = Path('/etc/systemd/system')
-HASHES = {'hcr': 'd752aba7081672cc54ec97e4e21d5fe21ec33a2f4872c753e2638aec5beee124',
-          'slowdns': 'a9d19e39ae23261628e8f21dac79548b31dceb45f959017bc50300e7ebfcad7d'}
+HASHES = {'hcr': 'd752aba7081672cc54ec97e4e21d5fe21ec33a2f4872c753e2638aec5beee124'}
+# SlowDNS destinations are retained only to restore pre-DNSTT backups.
 BINARIES = {'hcr': ['/opt/frimps-hcr/hcr-server', '/opt/frimps-hcr-tls/hcr-server'],
             'slowdns': ['/etc/slowdns/sldns-server']}
 UNITS = {'hcr': ['frimps-hcr.service', 'frimps-hcr-tls.service'],
@@ -140,7 +140,9 @@ def verify_unit(unit):
 
 
 def upgrade(kind):
-    candidate = ROOT / 'releases/epro-20261029' / ('hcr-server' if kind == 'hcr' else 'slowdns')
+    if kind != 'hcr':
+        raise ValueError('SlowDNS now uses upstream DNSTT; run bash ./slowdns-install.sh')
+    candidate = ROOT / 'releases/epro-20261029/hcr-server'
     if hashlib.sha256(candidate.read_bytes()).hexdigest() != HASHES[kind]:
         raise ValueError('Release binary checksum mismatch')
     units, paths, changes = [], [], {}
@@ -156,10 +158,7 @@ def upgrade(kind):
         if len(re.findall(r'^ExecStart=', effective, re.M)) != 1:
             raise ValueError('ExecStart override present; review it before binary upgrade')
         text = path.read_text()
-        if kind == 'hcr':
-            text = render_hcr(text, candidate)
-        elif not re.search(r'^ExecStart=/etc/slowdns/sldns-server .*127\.0\.0\.1:22$', text, re.M):
-            raise ValueError('Unrecognized managed SlowDNS unit')
+        text = render_hcr(text, candidate)
         changes[path] = text
         units.append(unit)
         paths.extend([path, Path(binary)])
@@ -171,7 +170,7 @@ def upgrade(kind):
         executable.chmod(0o700)
         help_result = run(executable, '--help', capture_output=True, text=True, timeout=10)
         help_text = help_result.stdout + help_result.stderr
-        required = ('listen', 'target', 'transport', 'max-download-frame') if kind == 'hcr' else ('udp', 'privkey-file', 'mtu')
+        required = ('listen', 'target', 'transport', 'max-download-frame')
         for flag in required:
             if not re.search(r'(?m)^\s*-{1,2}' + re.escape(flag) + r'(?:\s|=|$)', help_text):
                 raise ValueError('Candidate does not advertise required option: ' + flag)
@@ -208,11 +207,11 @@ def upgrade(kind):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('protocol', nargs='?', choices=('hcr', 'slowdns'))
+    parser.add_argument('protocol', nargs='?', choices=('hcr',))
     parser.add_argument('--rollback', type=Path)
     args = parser.parse_args()
     if bool(args.protocol) == bool(args.rollback):
-        parser.error('Choose hcr, slowdns, or --rollback DIRECTORY')
+        parser.error('Choose hcr or --rollback DIRECTORY; SlowDNS uses slowdns-install.sh')
     if sys.platform != 'linux' or os.geteuid() != 0 or os.uname().machine != 'x86_64':
         parser.error('Run as root on Linux amd64')
     import fcntl

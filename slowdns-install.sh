@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
-case "$(uname -m)" in x86_64|amd64) ;; *) echo 'The pinned SlowDNS binary requires Linux amd64.' >&2; exit 1;; esac
+case "$(uname -m)" in x86_64|amd64) ;; *) echo 'The default DNSTT installer requires Linux amd64.' >&2; exit 1;; esac
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 state_dir="${V6_STATE_DIR:-/etc/frimps-v6}"; opts="$state_dir/service-options.env"
 [[ $EUID -eq 0 ]] || { echo 'run as root' >&2; exit 1; }; [[ -r "$opts" ]] && source "$opts"
@@ -13,16 +13,24 @@ ingress_if="$(ip -4 route show default | awk 'NR == 1 {for (i=1;i<=NF;i++) if ($
 listen_ip="$(ip -4 -o addr show dev "$ingress_if" scope global | awk 'NR == 1 {split($4,a,"/"); print a[1]}')"
 [[ "$listen_ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'cannot determine SlowDNS ingress IPv4 address' >&2; exit 1; }
 python3 "$script_dir/slowdns-network.py" preflight "$listen_ip:53"
+bash "$script_dir/slowdns-build.sh"
+build=/var/cache/frimps-dnstt/upstream-20260501
+# Existing servers use the tested transactional activation path, preserving
+# effective listener, identity, SSH backend and response-size settings.
+if [[ -s /etc/systemd/system/frimps-slowdns.service && -x /etc/slowdns/sldns-server ]]; then
+  bash "$script_dir/dnstt-ssh.sh" stage --implementation upstream-20260501 --backend ssh --build "$build"
+  bash "$script_dir/dnstt-ssh.sh" activate --implementation upstream-20260501 --backend ssh
+  exit 0
+fi
 install -d -m 700 /etc/slowdns
 tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
-url='https://raw.githubusercontent.com/fisabiliyusri/SLDNS/b667b0d15be0589cd89cd2f997873296ceb07ce2/slowdns/sldns-server'
-hash='ffb4d459fe9a028f7ff4b49c4c88f2f3c5f1f78ac964fb8ca57e2dfaeb457add'
-curl -fL --retry 3 -o "$tmp" "$url"; printf '%s  %s\n' "$hash" "$tmp" | sha256sum -c -
+install -m 700 "$build/dnstt-server" "$tmp"
 # Generate a server-specific pair only on first installation. Reinstalls must
 # preserve client identity; an incomplete pair needs recovery, not replacement.
 chmod 700 "$tmp"
 bash "$script_dir/slowdns-keys.sh" /etc/slowdns "$tmp"
 install -m 700 "$tmp" /etc/slowdns/sldns-server
+install -m 600 "$build/build.json" "$state_dir/dnstt-backend.json"
 cat >/etc/systemd/system/frimps-slowdns.service <<EOF
 [Unit]
 Description=frimps SlowDNS to OpenSSH bridge
@@ -49,7 +57,10 @@ for attempt in {1..20}; do
   sleep 0.25
 done
 bash "$script_dir/slowdns-audit.sh" --local
-echo 'SlowDNS configured on UDP 53 to OpenSSH TCP 22.'
+python3 "$script_dir/dnstt-probe.py" --client "$build/dnstt-client" \
+  --keys /etc/slowdns --domain "$ns" --resolver "$listen_ip:53" \
+  --transport udp --ssh-target 127.0.0.1:22
+echo 'Upstream DNSTT SlowDNS configured on UDP 53 to OpenSSH TCP 22.'
 echo "Nameserver: $ns"
 echo "Public key: $(cat /etc/slowdns/server.pub)"
 echo 'DNS requirement: delegate the tunnel nameserver domain with an NS record to a DNS-only hostname whose A record is this VPS IPv4.'

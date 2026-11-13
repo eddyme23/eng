@@ -1,21 +1,13 @@
-# Optional ePro HCR and SlowDNS upgrades
+# Optional ePro HCR upgrade and SlowDNS networking
 
-The October 29, 2026 Linux amd64 releases are bundled under
-`releases/epro-20261029/`. Their upstream READMEs are retained there.
-Source announcements: https://t.me/ePro_Dev_Team/161 (SlowDNS) and
-https://t.me/ePro_Dev_Team/166 (HCR).
+The October 29, 2026 HCR release remains bundled under
+`releases/epro-20261029/`, with its upstream README. SHA-256:
+`d752aba7081672cc54ec97e4e21d5fe21ec33a2f4872c753e2638aec5beee124`.
+This is an integrity pin, not a publisher signature.
 
-Both binaries are UPX-packed. The repository checks their SHA-256 hashes;
-these are locally calculated integrity pins, not publisher signatures:
-
-| Binary | SHA-256 |
-| --- | --- |
-| hcr-server | d752aba7081672cc54ec97e4e21d5fe21ec33a2f4872c753e2638aec5beee124 |
-| slowdns | a9d19e39ae23261628e8f21dac79548b31dceb45f959017bc50300e7ebfcad7d |
-
-Fresh installs retain the previous pinned binaries until client compatibility
-is established on a VPS. Existing services must be active and enabled before
-an upgrade. No upstream installer is executed.
+SlowDNS now uses the tested source-built upstream DNSTT engine by default.
+The old ePro SlowDNS binary/update path has been retired; old backup restore
+support remains. See [DNSTT setup](DNSTT-SSH-TEST.md).
 
 ## HCR
 
@@ -49,23 +41,6 @@ Omitted settings retain the values in the installed unit. Set a diagnostic or
 capacity setting explicitly to `0` to reset it. Requested options must be
 advertised by the selected binary. The shared validator is also used for new
 installations; the old binary may reject newer optional diagnostics flags.
-
-## SlowDNS
-
-```bash
-bash ./apply-epro-updates.sh slowdns
-bash ./slowdns-audit.sh
-```
-
-The binary is replaced without changing domain, key pair, response-size
-environment file, SSH target, or listener. Local checks confirm keys and
-backend health but cannot prove TG/GT or HTTP Custom wire compatibility or
-browsing. Test login, reconnects and browsing before wider deployment.
-
-The listener checks use systemd MainPID ownership and the selected IP families.
-Fresh installs stop before key/binary changes if another process occupies the
-selected UDP 53 address. A loopback-only system DNS stub is allowed when
-SlowDNS binds a separate IPv4 address.
 
 ## Optional SlowDNS networking
 

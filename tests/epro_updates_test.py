@@ -25,10 +25,16 @@ class EproUpdatesTest(unittest.TestCase):
         self.upgrade = load('epro-upgrade')
 
     def test_pinned_release_integrity(self):
-        for kind, name in [('hcr', 'hcr-server'), ('slowdns', 'slowdns')]:
+        for kind, name in [('hcr', 'hcr-server')]:
             data = (ROOT / 'releases/epro-20261029' / name).read_bytes()
             self.assertEqual(hashlib.sha256(data).hexdigest(), self.upgrade.HASHES[kind])
             self.assertEqual(data[:4], b'\x7fELF')
+
+    def test_retired_slowdns_upgrade_cannot_overwrite_dnstt(self):
+        with patch.object(self.upgrade, 'run') as run:
+            with self.assertRaisesRegex(ValueError, 'upstream DNSTT'):
+                self.upgrade.upgrade('slowdns')
+            run.assert_not_called()
 
     def test_default_and_existing_hcr_settings_are_preserved(self):
         with patch.dict(os.environ, {}, clear=True):
