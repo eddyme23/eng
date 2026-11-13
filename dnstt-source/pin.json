@@ -1,0 +1,10 @@
+{
+  "implementation": "upstream-20260501",
+  "upstream": "https://www.bamsoftware.com/git/dnstt.git",
+  "revision": "0c5c52a57d899c05428c116898941761a2ed83c2",
+  "tag": "v1.20260501.0",
+  "license": "CC0-1.0; dependencies retain their own licenses in vendor/",
+  "archive_sha256": "c2f50faa9ea4879d99401b966a76bbf9ae4a04554e4b4b80bb02a0c9d802d968",
+  "source_files": 1364,
+  "provenance": "Imported public upstream/vendor snapshot from user-provided TG-VPN-SRC.zip; normalized CRLF/CRCRLF to LF. Declared revision independently confirmed in upstream commit page; complete snapshot not independently fetched due host network failure. Local archive and per-file hashes pin actual build inputs."
+}
