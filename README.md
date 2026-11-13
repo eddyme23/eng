@@ -21,12 +21,14 @@ bash ./install-frimps.sh
 |---|---|
 | OpenSSH | 22 |
 | SSH WebSocket | 80, 8080, 8880, 2082, 2086 |
-| SSH SSL and WebSocket TLS | 443 |
+| SSH SSL and SSH WebSocket TLS | 443 |
 | OpenVPN Websocket | 80, 8080, 8880; path `/openvpn` |
 | OpenVPN TLS | 443; path `/openvpn` |
-| BHTTP | 90, 8081 |
 | OpenVPN | TCP/UDP 1194; SSL 8433 |
-| SlowDNS | UDP 53 |
+| BHTTP | 90, 8081, 8180 |
+| HCR | 8881 NTLS / 8444 TLS |
+| DNSTT | UDP/DoH/DoT 53 |
+| VayDNS | UDP/DoH/DoT 53 |
 | Hysteria 2 | UDP 443 |
 | WireGuard | UDP 4000 |
 | ZiVPN | UDP 6000-19999 |
@@ -37,12 +39,3 @@ bash ./install-frimps.sh
 
 
 Menu: `frimps-v6-menu` or `menu`.
-
-## SlowDNS engine
-
-See [DNSTT + SSH setup and rollback](DNSTT-SSH-TEST.md) for the pinned,
-source-built upstream DNSTT engine used by fresh installs. It supports existing SlowDNS credentials
-and clients using UDP, DoH or DoT recursive resolvers. VayDNS clients require
-DNSTT compatibility mode; no separate VayDNS server is installed.
-Run `bash ./slowdns-install.sh` to upgrade an existing server with backup and
-rollback. Existing domain, keys and SSH credentials are preserved.
