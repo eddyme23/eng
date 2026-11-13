@@ -16,7 +16,10 @@ bash ./bhttp-audit.sh
 ```
 
 Fresh installs use the same helper through bhttp-install.sh. The standard
-apply-bhttp-updates.sh entrypoint also selects this engine.
+apply-bhttp-updates.sh entrypoint also selects this engine. The older
+apply-bhttp-port.sh command forwards to this same updater; it no longer
+creates the superseded socket-proxy configuration. Rollback arguments are
+passed through unchanged.
 
 Requested public TCP ports: **90, 8180, 8081**. Free ports are selected. A port
 already owned by the managed BHTTP service or its known alternate socket/proxy

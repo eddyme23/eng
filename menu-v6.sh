@@ -70,41 +70,6 @@ show_ports() {
   line
 }
 
-not_installed() {
-  clear
-  echo "═══ $1 ═══"
-  echo
-  echo 'This protocol is not installed or managed by v6 yet.'
-  echo 'No accounts, ports, or legacy services were changed.'
-  pause
-}
-
-status_menu() {
-  clear
-  menu_title 'FRIMPS SERVICE STATUS'
-  echo
-  for unit in ssh cron certbot.timer frimps-account-cleanup.timer frimps-bhttp-alt.socket frimps-v6-ssh-backend frimps-v6-dropbear frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-hcr frimps-hcr-tls frimps-bhttp frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield hysteria1-server hysteria2-server wg-quick@wg0 frimps-slowdns zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip nginx haproxy; do
-    printf '%-36s %-12s %s\n' "$unit" "$(systemctl is-active "$unit" 2>/dev/null || true)" "$(systemctl is-enabled "$unit" 2>/dev/null || true)"
-  done
-  echo
-  ss -ltn '( sport = :22 or sport = :80 or sport = :443 or sport = :8080 or sport = :8880 or sport = :2082 or sport = :2086 )' 2>/dev/null || true
-  pause
-}
-
-remaining_services_menu() {
-  clear
-  menu_title 'REMAINING SERVICE FOUNDATION'
-  echo
-  echo 'This stages the ordered UDP policy, OpenVPN baseline configurations,'
-  echo 'and a non-destructive WireGuard base configuration. It does not start'
-  echo 'or claim Hysteria, ZiVPN, SlowDNS, or UDP-Custom without reviewed binaries'
-  echo 'and authenticated configurations.'
-  read -r -p 'Stage these foundations now? [y/N] ' reply
-  [[ "$reply" =~ ^[Yy]$ ]] || return
-  V6_DOMAIN="$(jq -r '.primaryDomain' "$state_dir/routes.json")" "$script_dir/install-remaining-services.sh"
-  pause
-}
-
 wireguard_menu() {
   while true; do
     clear; menu_title 'WIREGUARD ACCOUNT MANAGEMENT'
@@ -208,8 +173,6 @@ zivpn_menu() {
     esac
   done
 }
-slowdns_menu() { clear; bash "$script_dir/slowdns-install.sh"; read -r -p 'Enable SlowDNS now? [y/N] ' x; [[ "$x" =~ ^[Yy]$ ]] && systemctl enable --now frimps-slowdns.service; pause; }
-udp_custom_menu() { clear; bash "$script_dir/udp-custom-install.sh"; read -r -p 'Enable UDP Custom now? [y/N] ' x; [[ "$x" =~ ^[Yy]$ ]] && systemctl enable --now frimps-badvpn.service frimps-udp-custom.service; pause; }
 utilities_menu() {
   while true; do
     clear; menu_title 'SYSTEM UTILITIES'
@@ -269,19 +232,19 @@ while true; do
   echo
   read_menu_option choice '  ► Select an option: ' || exit 0
   case "$choice" in
-    1|01) ssh_menu ;;
-    2|02) hysteria1_menu ;;
-    3|03) hysteria2_menu ;;
-    4|04) wireguard_menu ;;
-    5|05) openvpn_menu ;;
-    6|06) zivpn_menu ;;
-    7|07) bash "$script_dir/maintenance-v6.sh" monitor; pause ;;
-    8|08) maintenance_menu ;;
-    9|09) bash "$script_dir/maintenance-v6.sh" backup; pause ;;
+    1) ssh_menu ;;
+    2) hysteria1_menu ;;
+    3) hysteria2_menu ;;
+    4) wireguard_menu ;;
+    5) openvpn_menu ;;
+    6) zivpn_menu ;;
+    7) bash "$script_dir/maintenance-v6.sh" monitor; pause ;;
+    8) maintenance_menu ;;
+    9) bash "$script_dir/maintenance-v6.sh" backup; pause ;;
     10) utilities_menu ;;
     11) settings_menu ;;
     12) read -r -p 'Reboot server now? [y/N] ' confirm; [[ "$confirm" =~ ^[Yy]$ ]] && reboot ;;
-    0|00) exit 0 ;;
+    0) exit 0 ;;
     *) echo 'Invalid option.'; sleep 1 ;;
   esac
 done

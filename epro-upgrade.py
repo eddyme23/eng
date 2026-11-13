@@ -120,9 +120,6 @@ def restore(backup):
 
 def verify_unit(unit):
     run('systemctl', 'is-active', '--quiet', unit)
-    if unit == 'frimps-slowdns.service':
-        run('bash', ROOT / 'slowdns-audit.sh', '--local', timeout=45)
-        return
     text = (UNIT_DIR / unit).read_text()
     command = shlex.split(re.search(r'^ExecStart=(.*)$', text, re.M)[1])
     values = dict(zip(command[1::2], command[2::2]))

@@ -1,6 +1,7 @@
 import os
 import shutil
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -9,6 +10,16 @@ BASH = (r"C:/Program Files/Git/bin/bash.exe" if os.name == "nt" else shutil.whic
 
 @unittest.skipUnless(BASH and Path(BASH).exists(), "bash is required")
 class BhttpRestartTest(unittest.TestCase):
+    def test_old_port_command_forwards_to_current_updater_and_preserves_arguments(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            (base / 'apply-bhttp-port.sh').write_bytes((ROOT / 'apply-bhttp-port.sh').read_bytes())
+            (base / 'apply-bhttp-crisdev.sh').write_bytes(b'printf "ARG=%s\\n" "$@"\n')
+            result = subprocess.run([BASH, (base / 'apply-bhttp-port.sh').as_posix(),
+                                     '--rollback', '/backup/path with spaces'], text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.splitlines(), ['ARG=--rollback', 'ARG=/backup/path with spaces'])
+
     def run_restart(self, behavior=""):
         code = (ROOT / "restart-bhttp.sh").read_text(encoding="utf-8")
         code = code[:code.index('if [[ ${BASH_SOURCE[0]} == "$0" ]]')]
