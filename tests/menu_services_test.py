@@ -28,7 +28,7 @@ class MenuServicesTest(unittest.TestCase):
     def test_every_submenu_accepts_both_back_choices_and_eof(self):
         functions = self.menu_functions()
         menus = re.findall(r"^(\w+_menu)\(\) \{\n  while true; do", functions, re.M)
-        self.assertEqual(len(menus), 9)
+        self.assertEqual(len(menus), 10)
         for menu in menus:
             for data in ("0\n", "00\n", ""):
                 with self.subTest(menu=menu, data=data):

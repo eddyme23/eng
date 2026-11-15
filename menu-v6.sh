@@ -205,9 +205,25 @@ protocol_logs_menu() {
 
 ssh_menu() {
   while true; do
-    clear; menu_title 'SSH ACCOUNT MANAGEMENT'; item 1 'Create SSH account'; item 2 'Renew SSH account'; item 3 'Delete SSH account'; item 4 'List SSH accounts'; back_item
+    clear; menu_title 'SSH ACCOUNT MANAGEMENT'; item 1 'Create SSH account'; item 2 'Renew SSH account'; item 3 'Delete SSH account'; item 4 'List SSH accounts'; item 5 'App device certificates'; back_item
     read_menu_option x '  ► Option: ' || return
-    case "$x" in 1) ask_account; bash "$script_dir/ssh-accounts.sh" create "$account" "$validity"; pause;; 2) ask_account; bash "$script_dir/ssh-accounts.sh" renew "$account" "$validity"; pause;; 3) bash "$script_dir/ssh-accounts.sh" choose-delete; pause;; 4) bash "$script_dir/ssh-accounts.sh" list; pause;; 0) return;; *) echo 'Invalid option.'; sleep 1;; esac
+    case "$x" in 1) ask_account; bash "$script_dir/ssh-accounts.sh" create "$account" "$validity"; pause;; 2) ask_account; bash "$script_dir/ssh-accounts.sh" renew "$account" "$validity"; pause;; 3) bash "$script_dir/ssh-accounts.sh" choose-delete; pause;; 4) bash "$script_dir/ssh-accounts.sh" list; pause;; 5) app_cert_menu;; 0) return;; *) echo 'Invalid option.'; sleep 1;; esac
+  done
+}
+
+app_cert_menu() {
+  while true; do
+    clear; menu_title 'APP DEVICE CERTIFICATES'
+    item 1 'Approve device public key'; item 2 'List devices'; item 3 'Revoke device'; item 4 'Export device certificate JSON'; item 5 'Audit SSH certificate readiness'; back_item
+    read_menu_option x '  ► Option: ' || return
+    case "$x" in
+      1) read -r -p 'SSH username: ' account; read -r -p 'Device label: ' device; read -r -p 'Device PUBLIC key file on VPS: ' public_file; read -r -p 'Certificate validity (1-90 days): ' validity; bash "$script_dir/app-ssh-auth.sh" enroll "$account" "$device" "$public_file" --days "$validity"; pause ;;
+      2) bash "$script_dir/app-ssh-auth.sh" list; pause ;;
+      3) read -r -p 'SSH username: ' account; read -r -p 'Device label: ' device; bash "$script_dir/app-ssh-auth.sh" revoke "$account" "$device"; pause ;;
+      4) read -r -p 'SSH username: ' account; read -r -p 'Device label: ' device; bash "$script_dir/app-ssh-auth.sh" export "$account" "$device"; pause ;;
+      5) read -r -p 'SSH username: ' account; bash "$script_dir/app-ssh-auth.sh" audit "$account"; pause ;;
+      0) return ;; *) echo 'Invalid option.'; sleep 1 ;;
+    esac
   done
 }
 
