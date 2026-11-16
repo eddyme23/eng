@@ -7,8 +7,7 @@ access code, Google Cloud credentials, or Play Integrity is involved.
 ## VPS usage
 
 Update the checkout and run `bash ./refresh-menu-v6.sh`. In the menu select
-SSH Account Management -> App certificate accounts -> Create certificate account
-for Gen. Choose a NEW account name and validity (1-3650 days).
+SSH Account Management -> App certificate accounts -> Create certificate account. Choose a NEW account name and validity (1-3650 days).
 
 Equivalent commands:
 
