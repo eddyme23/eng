@@ -2,7 +2,8 @@
 
 ENG can issue operator-approved **OpenSSH user certificates** for the app's
 SSH-based transports. Existing password authentication, passwords, ports,
-SSH daemon configuration, TLS certificates and DNSTT keys are unchanged.
+TLS certificates and DNSTT keys are unchanged. The optional certificate-only
+account policy below changes SSH configuration only when explicitly requested.
 Nothing is enrolled automatically during installation or menu refresh.
 
 This is a device-credential foundation, **not enforced app exclusivity**.
@@ -25,7 +26,8 @@ Do not describe this feature as app-only enforcement in the app/generator.
   is still required, but the app need not prompt for its password.
 - The account's `.ssh/authorized_keys` gets one principal-scoped CA entry.
   Existing entries are preserved. No global CA trust or root certificate
-  access is introduced. Symlinks, unsafe ownership/write permissions and
+  access is introduced. Certificate-only accounts instead use a root-owned
+  per-account allowlist under `/etc/ssh/frimps-app-keys/`. Symlinks, unsafe ownership/write permissions and
   hard-linked authorized_keys files are rejected before writing.
   The home must belong to the managed account; root-owned/custom homes need
   review rather than automatic permission changes.
@@ -75,8 +77,85 @@ creates a new key and requires enrollment again.
 `maintenance-v6.sh backup` includes the root-private CA and device metadata.
 Back up the per-user authorized_keys files separately if backing up accounts.
 This feature does not silently rotate or regenerate an incomplete CA pair.
-Existing password holders can edit their own authorized_keys; this feature
-does not turn shared password accounts into a hardened app-only boundary.
+Existing mixed/password account holders can edit their own authorized_keys;
+use the separate certificate-only policy for app-specific accounts.
+
+## TG / Gen alignment and account policy
+
+Reviewed TG's `native/SSH-DEVICE-AUTH.md`, the production certificate parser,
+and the **Audit VPN apps and AdMob parity** chat on 2026-11-16. TG currently
+uses non-exportable P-256 device keys and accepts ENG's signed P-256 user
+certificate with its Ed25519 signing CA. ENG still accepts Ed25519 device
+public keys for other compatible certificate clients; use **P-256 for TG**.
+TG's `device_certificate` profile mode differs intentionally from the
+package's `openssh-user-certificate` authMethod; both formats are supported.
+
+After enrollment, obtain the exact public policy fields required by Gen:
+
+```bash
+bash ./app-ssh-auth.sh pins app_eddy > /root/app-eddy-gen-policy.json
+# If a different SSH host key is negotiated, select its configured public file:
+bash ./app-ssh-auth.sh pins app_eddy --host-key /etc/ssh/ssh_host_rsa_key.pub
+```
+
+The `genPolicy` object contains `SSHAuthMethod=device_certificate`,
+`SSHCertificateCA=SHA256:...`, and `SSHHostKeyPin=SHA256:...`. Fill each
+transport's username with `app_eddy`; passwords may be blank for that profile.
+The pin must match the **negotiated** SSH host key. The command verifies that
+the chosen key is configured for both SSH backends, but does not perform the
+phone's SSH negotiation. It does not change the host keys or pin bypass rules.
+The enrollment JSON also provides an optional `caFingerprint` field; TG can
+ignore this extra field and verifies the actual certificate and CA itself.
+
+Keep ordinary clients on their current accounts. Create a **separate managed
+SSH account** for app-specific access, enroll its P-256 device key, and test
+certificate login first. Then explicitly enforce certificate-only SSH login:
+
+```bash
+bash ./app-ssh-auth.sh policy app_eddy --mode certificates-only
+bash ./app-ssh-auth.sh audit app_eddy
+
+# Revert this account to its inherited password/public-key configuration:
+bash ./app-ssh-auth.sh policy app_eddy --mode mixed
+```
+
+`certificates-only` requires an unexpired approved device. It applies a scoped
+OpenSSH Match rule to this username on SSH 22 and the installed loopback
+backend 2222, disables password/keyboard-interactive login, requires public-key
+authentication with certificate algorithms, and reads only the root-owned
+principal-scoped CA allowlist. Ordinary raw public keys are not accepted there.
+It does not lock or replace the system password, modify other protocol daemons,
+or change another account's authentication. Accounts remain mixed by default.
+Converting a shared account would prevent that account's other SSH password
+clients from logging in, so use a separate app account.
+
+The operation saves a private snapshot under
+`/var/backups/frimps-v6/app-ssh-policy/`, validates syntax/effective policy,
+and sends HUP to the SSH masters. Existing authenticated sessions stay open.
+Failure restores the prior configuration and trust files, then attempts to
+reload them; inspect any explicit recovery error from an existing admin session.
+Custom conditional Match rules in the base configs or their includes require
+manual review first: a localhost check cannot exclude a password exception for
+another address. An effective-policy mismatch also causes failure rather than
+an inaccurate success report. Rebuilding the dedicated SSH backend
+preserves the policy include. Keep the include at the end of each config.
+
+Enrollment/revocation synchronizes the central allowlist for certificate-only
+accounts. Account deletion/expiry cleanup revokes devices before removing the
+OS account, including removal of stale central trust. Policy remains scoped to
+that username after deletion as a fail-closed measure; explicitly choose mixed
+if intentionally reusing its name for password clients. Credential revocation
+and policy changes affect new logins, not existing sessions. Maintenance backups
+now include `/etc/ssh` (host private keys and policy), so keep them root-private.
+
+An ENG-generated P-256 certificate was also parsed successfully by TG's actual
+production `OpenSshDeviceCertificate` Java implementation (not a replacement
+parser). Its CA fingerprint matches native `ssh-keygen -lf -E sha256` output.
+
+No live Linux sshd/PAM certificate-only login or phone Keystore signing has yet
+been verified by this server change. Test both certificate success and password
+rejection for the app account, plus password success for an unrelated ordinary
+account, through each required transport before wider rollout.
 
 ## Transport mapping
 

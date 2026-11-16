@@ -214,7 +214,7 @@ ssh_menu() {
 app_cert_menu() {
   while true; do
     clear; menu_title 'APP DEVICE CERTIFICATES'
-    item 1 'Approve device public key'; item 2 'List devices'; item 3 'Revoke device'; item 4 'Export device certificate JSON'; item 5 'Audit SSH certificate readiness'; back_item
+    item 1 'Approve device public key'; item 2 'List devices'; item 3 'Revoke device'; item 4 'Export device certificate JSON'; item 5 'Audit SSH certificate readiness'; item 6 'Show TG / Gen certificate pins'; item 7 'Set SSH account authentication policy'; back_item
     read_menu_option x '  ► Option: ' || return
     case "$x" in
       1) read -r -p 'SSH username: ' account; read -r -p 'Device label: ' device; read -r -p 'Device PUBLIC key file on VPS: ' public_file; read -r -p 'Certificate validity (1-90 days): ' validity; bash "$script_dir/app-ssh-auth.sh" enroll "$account" "$device" "$public_file" --days "$validity"; pause ;;
@@ -222,6 +222,8 @@ app_cert_menu() {
       3) read -r -p 'SSH username: ' account; read -r -p 'Device label: ' device; bash "$script_dir/app-ssh-auth.sh" revoke "$account" "$device"; pause ;;
       4) read -r -p 'SSH username: ' account; read -r -p 'Device label: ' device; bash "$script_dir/app-ssh-auth.sh" export "$account" "$device"; pause ;;
       5) read -r -p 'SSH username: ' account; bash "$script_dir/app-ssh-auth.sh" audit "$account"; pause ;;
+      6) read -r -p 'SSH username: ' account; bash "$script_dir/app-ssh-auth.sh" pins "$account"; pause ;;
+      7) read -r -p 'SSH username (use a separate app account): ' account; read -r -p 'Mode (mixed / certificates-only): ' auth_mode; read -r -p 'Apply SSH login policy to this account? [y/N] ' confirm; [[ "$confirm" =~ ^[Yy]$ ]] && bash "$script_dir/app-ssh-auth.sh" policy "$account" --mode "$auth_mode"; pause ;;
       0) return ;; *) echo 'Invalid option.'; sleep 1 ;;
     esac
   done

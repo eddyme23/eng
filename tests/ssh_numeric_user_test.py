@@ -5,7 +5,7 @@ BASH=r"C:/Program Files/Git/bin/bash.exe" if os.name=="nt" else shutil.which("ba
 SOURCE=(ROOT/'ssh-accounts.sh').read_text(encoding='utf-8')
 VALID=SOURCE[SOURCE.index('valid_user()'):SOURCE.index('account_uid_by_name()')]
 CREATE=SOURCE[SOURCE.index('create_system_account()'):SOURCE.index('valid_days()')]
-DELETE=SOURCE[SOURCE.index('delete_system_account()'):SOURCE.index('case "$action" in')]
+DELETE=SOURCE[SOURCE.index('retire_app_credentials()'):SOURCE.index('case "$action" in')]
 class NumericUserTest(unittest.TestCase):
  def test_validation(self):
   for name in ['12345','00123','1eddy','eddy','user_1']:

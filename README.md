@@ -44,4 +44,6 @@ Menu: `frimps-v6-menu` or `menu`.
 
 [App certificate setup and app/generator handoff](APP-SSH-AUTH.md) adds
 operator-approved per-device OpenSSH certificates alongside existing password
-accounts. No automatic enrollment or app-identity attestation is included.
+accounts. TG/Gen pin export and optional certificate-only SSH account policies
+are available; ordinary accounts retain password access. No automatic enrollment
+or app-identity attestation is included.

@@ -52,6 +52,7 @@ class AppSshAuthTest(unittest.TestCase):
         self.public = self.m.public_key((self.auth / 'ca.pub').read_text())
         self.expiry = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=2)
         self.user = SimpleNamespace(pw_name='eddy', pw_dir=str(self.auth / 'home'), pw_uid=1001, pw_gid=1001)
+        Path(self.user.pw_dir).mkdir()
         self.content = b'# existing\nssh-ed25519 unrelated-key old-client\n'
         self.before = self.content
         self.args = argparse.Namespace(username='eddy', device='phone1', days=7, public_key=self.base / 'device.pub')
@@ -85,6 +86,7 @@ class AppSshAuthTest(unittest.TestCase):
         self.assertNotIn('permit-agent-forwarding', output)
         fingerprint = subprocess.check_output([KEYGEN, '-l', '-f', str(self.auth / 'ca.pub')], text=True).split()[1]
         self.assertIn(fingerprint, output)
+        self.assertEqual(result['caFingerprint'], fingerprint)
         self.assertEqual(datetime.fromisoformat(result['validBefore']), self.expiry)
         self.assertFalse(result['privateKeyIncluded'])
         self.assertNotIn('password', result)
@@ -122,6 +124,21 @@ class AppSshAuthTest(unittest.TestCase):
         self.assertIn(second['deviceId'].encode(), self.content)
         self.assertTrue(self.content.startswith(self.before))
         self.assertEqual(self.m.read_db()['devices'][0]['status'], 'revoked')
+
+    def test_account_purge_revokes_devices_and_clears_only_its_central_trust(self):
+        module = self.m.policy_module()
+        module.KEYS = self.auth / 'central'
+        module.KEYS.mkdir()
+        (module.KEYS / 'eddy').write_text('old device trust')
+        (module.KEYS / 'other').write_text('other account trust')
+        with self.patches(), patch.object(self.m, 'policy_module', return_value=module):
+            result = self.m.enroll(self.args)
+            with patch.dict(sys.modules, {'pwd': SimpleNamespace(getpwnam=lambda _: self.user)}):
+                self.m.purge_account('eddy')
+        self.assertEqual((module.KEYS / 'eddy').read_bytes(), b'')
+        self.assertEqual((module.KEYS / 'other').read_text(), 'other account trust')
+        self.assertEqual(self.m.read_db()['devices'][0]['status'], 'revoked')
+        self.assertNotIn(result['deviceId'].encode(), self.content)
 
     def test_invalid_validity_and_private_key_are_rejected(self):
         for days in (0, -1, 91):

@@ -71,6 +71,9 @@ for key in /etc/ssh/ssh_host_ed25519_key /etc/ssh/ssh_host_rsa_key; do
 done
 ((keys > 0)) || { echo 'No existing OpenSSH host keys; no gateway change made.' >&2; exit 1; }
 chmod 600 "$config"
+if [[ -f /etc/ssh/frimps-app-policy.conf ]]; then
+  printf '\n# ENG app certificate policy include\nMatch all\nInclude /etc/ssh/frimps-app-policy.conf\n' >> "$config"
+fi
 /usr/sbin/sshd -t -f "$config"
 cat > "$backend_unit" <<EOF
 [Unit]

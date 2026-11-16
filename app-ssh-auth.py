@@ -2,7 +2,9 @@
 """Operator-approved device SSH certificates alongside existing password accounts."""
 import argparse
 import base64
-from contextlib import contextmanager
+import hashlib
+import importlib.util
+from contextlib import contextmanager, ExitStack
 from datetime import datetime, timedelta, timezone
 import json
 import os
@@ -14,11 +16,28 @@ import subprocess
 import sys
 import tempfile
 import uuid
+from types import SimpleNamespace
 
 AUTH = Path('/etc/frimps-app-auth')
 STATE = Path(os.environ.get('V6_STATE_DIR', '/etc/frimps-v6'))
 KEYGEN = 'ssh-keygen'
 MARKER = 'frimps-app-device:'
+
+
+def policy_module():
+    spec = importlib.util.spec_from_file_location('app_policy', Path(__file__).with_name('app-ssh-policy.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def manager():
+    return SimpleNamespace(**globals())
+
+
+def fingerprint(key):
+    raw = base64.b64decode(key.split()[1], validate=True)
+    return 'SHA256:' + base64.b64encode(hashlib.sha256(raw).digest()).decode().rstrip('=')
 
 
 def run(*args):
@@ -103,9 +122,10 @@ def backend_policy(user, key_type=None):
         settings = dict(line.split(' ', 1) for line in text.splitlines() if ' ' in line)
         paths = settings.get('authorizedkeysfile', '').split()
         expected = str(Path(user.pw_dir) / '.ssh/authorized_keys')
+        central = str(policy_module().KEYS / user.pw_name)
         expanded = [p.replace('%h', user.pw_dir).replace('%u', user.pw_name) for p in paths]
         if settings.get('pubkeyauthentication') != 'yes' or not any(
-                p == '.ssh/authorized_keys' or p == expected for p in expanded):
+                p == '.ssh/authorized_keys' or p == expected or p == central for p in expanded):
             raise ValueError(f'{config} must enable public keys and the normal .ssh/authorized_keys path')
         if not set(settings.get('authenticationmethods', 'any').split()) & {'any', 'publickey'}:
             raise ValueError(f'{config} requires another authentication step; certificate-only login is unavailable')
@@ -246,6 +266,7 @@ def enroll(args):
     if not 1 <= args.days <= 90:
         raise ValueError('Certificate validity must be 1–90 days, capped by account expiry')
     db = read_db()
+    previous_db = json.loads(json.dumps(db))
     if any(d['username'] == args.username and d['device'] == args.device for d in db['devices']):
         raise ValueError('Device label already exists; revoke it and use a new label for replacement')
     fd = os.open(args.public_key, os.O_RDONLY | getattr(os, 'O_NONBLOCK', 0) |
@@ -281,8 +302,10 @@ def enroll(args):
         write(edit_lines(before, identity, entry(record, ca)))
         try:
             save_db(db)
+            policy_module().sync(manager(), db, args.username)
         except BaseException:
             write(before)
+            save_db(previous_db)
             raise
     return package(record, ca)
 
@@ -292,11 +315,12 @@ def package(record, ca):
                 username=record['username'], deviceId=record['id'], deviceLabel=record['device'],
                 publicKey=record['publicKey'], certificate=record['certificate'], caPublicKey=ca,
                 validAfter=record['validAfter'], validBefore=record['validBefore'],
-                privateKeyIncluded=False)
+                privateKeyIncluded=False, caFingerprint=fingerprint(ca))
 
 
 def revoke(args):
     db = read_db()
+    previous_db = json.loads(json.dumps(db))
     matches = [d for d in db['devices'] if d['username'] == args.username and d['device'] == args.device]
     if len(matches) != 1:
         raise ValueError('Device not found')
@@ -307,21 +331,62 @@ def revoke(args):
         user = pwd.getpwnam(identifier(args.username))
     except KeyError:
         user = None
+    if user is not None and not Path(user.pw_dir).exists():
+        user = None
     if user is not None and (user.pw_uid < 1000 or user.pw_uid == 65534):
         raise ValueError('Refusing a root/system account')
     record['status'] = 'revoked'
     record['revokedAt'] = datetime.now(timezone.utc).isoformat()
     if user is None:
         save_db(db)
+        policy_module().sync(manager(), db, args.username)
     else:
         with authorized_file(user) as (before, write):
             write(edit_lines(before, record['id']))
             try:
                 save_db(db)
+                policy_module().sync(manager(), db, args.username)
             except BaseException:
                 write(before)
+                save_db(previous_db)
                 raise
     print('Device revoked for new SSH logins. Existing sessions are not terminated.')
+
+
+def pin_policy(username, host_key):
+    user, _ = account(username)
+    backend_policy(user)
+    transport_policy()
+    allowed = []
+    for config in (Path('/etc/ssh/sshd_config'), STATE / 'sshd-backend.conf'):
+        if config.exists():
+            text = run('/usr/sbin/sshd', '-T', '-f', config).stdout
+            configured = [Path(line.split(' ', 1)[1] + '.pub') for line in text.splitlines() if line.startswith('hostkey ')]
+            if host_key not in configured:
+                raise ValueError(f'{host_key} is not a configured host key for {config}')
+            allowed.extend(map(str, configured))
+    fields = host_key.read_text().split()
+    if len(fields) < 2:
+        raise ValueError('Invalid host public key')
+    ca = authority()
+    return dict(username=username, genPolicy=dict(SSHAuthMethod='device_certificate',
+                SSHCertificateCA=fingerprint(ca), SSHHostKeyPin=fingerprint(' '.join(fields[:2]))),
+                hostKeyAlgorithm=fields[0], configuredHostPublicKeys=sorted(set(allowed)),
+                note='Pin must match the actually negotiated SSH host key; this is not a TLS or user CA host pin.')
+
+
+def purge_account(username):
+    identifier(username)
+    records = [d for d in read_db()['devices'] if d['username'] == username and d['status'] == 'active']
+    for record in records:
+        revoke(SimpleNamespace(username=username, device=record['device']))
+    # Even an empty/stale database must remove any surviving central trust file.
+    path = policy_module().KEYS / username
+    if path.exists():
+        if path.is_symlink():
+            raise ValueError('Unsafe central trust path')
+        atomic(path, b'')
+        path.chmod(0o644)
 
 
 def main():
@@ -338,6 +403,15 @@ def main():
     commands.add_parser('list')
     audit = commands.add_parser('audit')
     audit.add_argument('username')
+    pins = commands.add_parser('pins')
+    pins.add_argument('username')
+    pins.add_argument('--host-key', type=Path, default=Path('/etc/ssh/ssh_host_ed25519_key.pub'))
+    policy = commands.add_parser('policy')
+    policy.add_argument('username')
+    policy.add_argument('--mode', choices=('mixed', 'certificates-only'), required=True)
+    purge = commands.add_parser('purge', help=argparse.SUPPRESS)
+    purge.add_argument('username')
+    purge.add_argument('--from-account-manager', action='store_true', help=argparse.SUPPRESS)
     export = commands.add_parser('export')
     export.add_argument('username')
     export.add_argument('device')
@@ -351,8 +425,16 @@ def main():
     AUTH.mkdir(mode=0o700, exist_ok=True)
     if AUTH.stat().st_uid != 0 or AUTH.stat().st_mode & 0o077:
         raise ValueError('Auth directory must be root-owned mode 0700')
-    with (STATE / '.ssh-accounts.lock').open('a') as accounts_lock, (AUTH / 'lock').open('a') as lock:
-        fcntl.flock(accounts_lock, fcntl.LOCK_EX)
+    with ExitStack() as stack:
+        if args.action == 'purge' and args.from_account_manager:
+            inherited, expected = os.fstat(9), (STATE / '.ssh-accounts.lock').stat()
+            if (inherited.st_dev, inherited.st_ino) != (expected.st_dev, expected.st_ino):
+                raise ValueError('Expected inherited SSH account-manager lock')
+            fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        else:
+            accounts_lock = stack.enter_context((STATE / '.ssh-accounts.lock').open('a'))
+            fcntl.flock(accounts_lock, fcntl.LOCK_EX)
+        lock = stack.enter_context((AUTH / 'lock').open('a'))
         fcntl.flock(lock, fcntl.LOCK_EX)
         if args.action == 'enroll':
             print(json.dumps(enroll(args), indent=2))
@@ -361,10 +443,18 @@ def main():
         elif args.action == 'list':
             for d in read_db()['devices']:
                 print(d['username'], d['device'], d['status'], d['validBefore'], sep='\t')
+        elif args.action == 'policy':
+            policy_module().set_mode(manager(), args.username, args.mode)
+        elif args.action == 'pins':
+            print(json.dumps(pin_policy(args.username, args.host_key), indent=2))
+        elif args.action == 'purge':
+            purge_account(args.username)
         elif args.action == 'audit':
             user, _ = account(args.username)
             print(json.dumps(dict(sshConfigs=backend_policy(user), transports=transport_policy(),
-                                  loginAndBrowsing='not tested', passwords='configuration unchanged'), indent=2))
+                                  loginAndBrowsing='not tested',
+                                  accountPolicy=policy_module().modes(manager()).get(args.username, 'mixed'),
+                                  otherAccounts='configuration unchanged'), indent=2))
         else:
             user, _ = account(args.username)
             del user

@@ -65,12 +65,19 @@ slowdns_public_ipv4() {
 commit() { local temp; temp="$(mktemp "$state_dir/.ssh-users.XXXXXX")"; printf '%s\n' "$1" > "$temp"; chmod 600 "$temp"; mv -f "$temp" "$store"; }
 managed() { jq -e --arg name "$1" '.[] | select(.name == $name)' "$store" >/dev/null; }
 
+retire_app_credentials() {
+  [[ -s /etc/frimps-app-auth/devices.json || -e /etc/ssh/frimps-app-keys/"$1" ]] || return 0
+  local helper
+  helper="$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/app-ssh-auth.py"
+  [[ -f "$helper" ]] || { echo 'App credential manager is missing; account deletion stopped.' >&2; return 1; }
+  python3 "$helper" purge "$1" --from-account-manager
+}
 delete_system_account() {
   local name="$1" account_uid attempt
   valid_user "$name" || { echo 'Invalid managed username.' >&2; return 1; }
   account_uid="$(account_uid_by_name "$name")" || {
     local lookup_status=$?
-    [[ $lookup_status -eq 3 ]] && return 0
+    if [[ $lookup_status -eq 3 ]]; then retire_app_credentials "$name"; return $?; fi
     return 1
   }
   [[ $account_uid =~ ^[0-9]+$ ]] || return 1
@@ -80,6 +87,7 @@ delete_system_account() {
   # Disable new logins before closing this account's existing sessions.
   usermod -L "$name" || return 1
   chage -E 0 "$name" || return 1
+  retire_app_credentials "$name" || return 1
   pkill -TERM -u "$account_uid" 2>/dev/null || true
   for attempt in {1..20}; do
     pgrep -u "$account_uid" >/dev/null || break
