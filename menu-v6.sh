@@ -220,7 +220,7 @@ app_cert_menu() {
       1) ask_account; bash "$script_dir/certificate-accounts.sh" create "$account" "$validity"; pause ;;
       2) ask_account; bash "$script_dir/certificate-accounts.sh" renew "$account" "$validity"; pause ;;
       3) read -r -p 'Certificate account name: ' account; bash "$script_dir/app-ssh-auth.sh" revoke "$account" certificate-account; pause ;;
-      4) bash "$script_dir/app-ssh-auth.sh" list; pause ;;
+      4) bash "$script_dir/app-ssh-auth.sh" bundle-list; pause ;;
       5) read -r -p 'Certificate account name: ' account; bash "$script_dir/app-ssh-auth.sh" bundle-export "$account"; pause ;;
       0) return ;; *) echo 'Invalid option.'; sleep 1 ;;
     esac

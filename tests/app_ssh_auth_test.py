@@ -157,6 +157,24 @@ class AppSshAuthTest(unittest.TestCase):
             self.assertEqual(self.m.read_db(), previous_db)
             self.assertEqual(self.content, previous_keys)
 
+    def test_certificate_account_list_filters_phone_keys_and_marks_expiry(self):
+        import io
+        from contextlib import redirect_stdout
+        past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+        future = self.expiry.isoformat()
+        self.m.save_db({'version': 1, 'devices': [
+            dict(username='old-phone', device='phone1', status='active', validBefore=future),
+            dict(username='active', device='certificate-account', status='active', validBefore=future),
+            dict(username='expired', device='certificate-account', status='active', validBefore=past),
+            dict(username='revoked', device='certificate-account', status='revoked', validBefore=future)]})
+        output = io.StringIO()
+        with redirect_stdout(output):
+            self.m.list_certificate_accounts()
+        self.assertNotIn('old-phone', output.getvalue())
+        self.assertIn('active\tactive', output.getvalue())
+        self.assertIn('expired\texpired', output.getvalue())
+        self.assertIn('revoked\trevoked', output.getvalue())
+
     def test_real_certificate_signing_expiry_and_restricted_forwarding(self):
         with self.patches():
             result = self.m.enroll(self.args)

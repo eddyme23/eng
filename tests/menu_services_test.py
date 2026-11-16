@@ -38,6 +38,28 @@ class MenuServicesTest(unittest.TestCase):
                     self.assertNotIn("Invalid option", result.stdout)
                     self.assertIn("RETURNED", result.stdout)
 
+    def test_certificate_menu_dispatches_all_five_handlers_and_returns_after_failure(self):
+        cases = [
+            ('01\ncustomer1\n30\n00\n', 'certificate-accounts.sh create customer1 30'),
+            ('02\ncustomer1\n30\n00\n', 'certificate-accounts.sh renew customer1 30'),
+            ('03\ncustomer1\n00\n', 'app-ssh-auth.sh revoke customer1 certificate-account'),
+            ('04\n00\n', 'app-ssh-auth.sh bundle-list'),
+            ('05\ncustomer1\n00\n', 'app-ssh-auth.sh bundle-export customer1'),
+        ]
+        for data, expected in cases:
+            for exit_code in (0, 1):
+                with self.subTest(action=expected, status=exit_code):
+                    code = ('set -u\nRED= GREEN= YELLOW= BLUE= CYAN= WHITE= BOLD= NC=\n'
+                            + self.menu_functions()
+                            + '\nscript_dir=/fixture; clear() { :; }; pause() { :; }; '
+                            + 'bash() { printf "CALL %s\\n" "$*"; return ' + str(exit_code) + '; }; '
+                            + 'app_cert_menu; echo RETURNED')
+                    result = self.run_shell(code, data)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIn('CALL /fixture/' + expected, result.stdout)
+                    self.assertIn('RETURNED', result.stdout)
+                    self.assertNotIn('Invalid option', result.stdout)
+
     def test_padded_choices_are_decimal_and_invalid_input_is_literal(self):
         for value, expected in (("0", "0"), ("00", "0"), ("01", "1"),
                                 ("08", "8"), ("09", "9"), ("10", "10"),

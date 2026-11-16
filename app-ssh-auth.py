@@ -478,6 +478,24 @@ def renew_bundle(args):
     return bundle_path(args.username)
 
 
+def list_certificate_accounts():
+    now = datetime.now(timezone.utc)
+    rows = []
+    for record in read_db()['devices']:
+        if record['device'] != 'certificate-account':
+            continue
+        status = record['status']
+        if status == 'active' and datetime.fromisoformat(record['validBefore']) <= now:
+            status = 'expired'
+        rows.append((record['username'], status, record['validBefore']))
+    if not rows:
+        print('No certificate accounts found.')
+        return
+    print('ACCOUNT\tSTATUS\tCERTIFICATE EXPIRY (UTC)')
+    for row in rows:
+        print(*row, sep='\t')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='action', required=True)
@@ -495,6 +513,7 @@ def main():
     cancel.add_argument('username')
     cancel.add_argument('device')
     commands.add_parser('list')
+    commands.add_parser('bundle-list')
     audit = commands.add_parser('audit')
     audit.add_argument('username')
     pins = commands.add_parser('pins')
@@ -546,6 +565,8 @@ def main():
             print(json.dumps(enroll(args), indent=2))
         elif args.action == 'revoke':
             revoke(args)
+        elif args.action == 'bundle-list':
+            list_certificate_accounts()
         elif args.action == 'list':
             for d in read_db()['devices']:
                 print(d['username'], d['device'], d['status'], d['validBefore'], sep='\t')
