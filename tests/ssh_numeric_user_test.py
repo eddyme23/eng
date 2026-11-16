@@ -7,6 +7,28 @@ VALID=SOURCE[SOURCE.index('valid_user()'):SOURCE.index('account_uid_by_name()')]
 CREATE=SOURCE[SOURCE.index('create_system_account()'):SOURCE.index('valid_days()')]
 DELETE=SOURCE[SOURCE.index('retire_app_credentials()'):SOURCE.index('case "$action" in')]
 class NumericUserTest(unittest.TestCase):
+ def test_certificate_creation_passes_real_dispatch_and_reaches_account_commit(self):
+  dispatch=SOURCE[SOURCE.index('case "$action" in'):]
+  mocks=r"""
+set -euo pipefail
+action=create-certificate; user=edd; days=45; store=/unused
+state_dir=/unused
+valid_user() { return 0; }; valid_days() { return 0; }
+managed() { return 1; }; account_uid_by_name() { return 3; }
+create_system_account() { echo "CREATE $1"; }
+usermod() { echo 'PASSWORD HASH SET'; }; chage() { echo 'EXPIRY SET'; }
+openssl() { printf 'synthetic-secret'; }; date() { printf '2030-01-01'; }
+jq() { printf '[]'; }; commit() { echo COMMITTED; }
+die() { echo "$*" >&2; exit 1; }
+"""
+  r=subprocess.run([BASH,'-c',mocks+dispatch],capture_output=True,text=True)
+  self.assertEqual(r.returncode,0,r.stderr)
+  self.assertIn('CREATE edd',r.stdout)
+  self.assertIn('COMMITTED',r.stdout)
+  self.assertIn('Created certificate account identity: edd',r.stdout)
+  self.assertNotIn('synthetic-secret',r.stdout)
+  self.assertNotIn('Password for',r.stdout)
+
  def test_validation(self):
   for name in ['12345','00123','1eddy','eddy','user_1']:
    r=subprocess.run([BASH,'-c',VALID+'\nvalid_user "$1"','test',name]);self.assertEqual(r.returncode,0,name)

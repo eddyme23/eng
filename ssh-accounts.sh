@@ -114,8 +114,8 @@ case "$action" in
     ((selection >= 1 && selection <= ${#names[@]})) || { echo 'Invalid selection. Returning to SSH menu.'; exit 0; }
     exec "$0" delete "${names[$((selection-1))]}"
     ;;
-  create|renew|delete|cleanup) ;;
-  *) die "action must be create, renew, delete, list, choose-delete, or cleanup" ;;
+  create|create-certificate|renew|delete|cleanup) ;;
+  *) die "action must be create, create-certificate, renew, delete, list, choose-delete, or cleanup" ;;
 esac
 
 if [[ "$action" == "cleanup" ]]; then
