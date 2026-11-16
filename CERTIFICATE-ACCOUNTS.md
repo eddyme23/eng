@@ -19,7 +19,9 @@ bash ./app-ssh-auth.sh revoke customer1 certificate-account
 ```
 
 Creation generates a random, undisclosed OS password, signs a fresh P-256 key,
-and applies certificate-only SSH policy to that account. Other accounts retain
+and applies certificate-only SSH policy to that account. A separate generated
+UDP Custom password is included privately in its JSON; SSH password login remains
+disabled. UDP Custom still uses password authentication underneath. Other accounts retain
 password access. On failure no bundle is issued; remove the new account through
 SSH Account Management before retrying. Do not reuse an existing password account
 with the low-level `bundle-create` command: it explicitly converts that account.
@@ -31,11 +33,43 @@ Renewal extends the OS account, re-signs its same key and updates this file.
 Import the replacement in Gen and redistribute the updated configuration.
 Certificate validity is capped by OS account expiry at midnight UTC. Renewal
 of an unexpired account extends its existing expiry; certificate lifetime starts
-at renewal time. Revocation stops new logins, removes the local bundle and does
+at renewal time. Revocation locks the account password (including UDP Custom), removes certificate
+trust and the local bundle, and does
 not disconnect authenticated sessions. Account deletion uses the existing purge.
 Older renewed certificates remain valid until expiry or account revocation.
 
 ## App / Gen handoff
+
+The menu also offers **Import existing certificate JSON** and **Show certificate
+connection details**. Create/renew/import print the applicable endpoint details,
+payloads and DNSTT nameserver/key without printing private credentials.
+
+For import, choose a NEW account name and validity, paste the complete ENG JSON,
+then type `END` on its own line. ENG verifies its private/public key match and
+reuses that key, but always issues a NEW locally trusted certificate. The old
+certificate, CA, username, expiry and UDP password are not adopted. This does not
+automatically trust foreign certificate authorities. Use the newly exported JSON
+for this VPS. Only complete P-256 ENG bundles are accepted, not arbitrary TLS
+certificates or public certificates without a private key. The low-level command
+`bash ./app-ssh-auth.sh bundle-import ACCOUNT --days DAYS` supports an existing
+managed SSH identity and explicitly converts it to certificate-only SSH login.
+
+## UDP Custom account integration
+
+New JSON includes `udpCustom` with `authMethod: "password"`, `username`, `password`
+and `portRange: "50001-65535"`. The private generated secret is stored only inside
+the root-only bundle; Linux stores its SHA-512 password hash. The ordinary account
+listing and connection-details output never print it. Renewal preserves it;
+renewing an older bundle adds it. Revocation prevents new password authentication
+as well as new certificate authentication. Existing UDP sessions may persist.
+
+App/Gen must carry this nested object in the protected config and pass these
+credentials to the existing UDP Custom engine. No manual username/password entry
+is needed. This is NOT certificate authentication on the UDP wire. Do not send
+SSH certificates to the password-only UDP backend or derive a password from a
+public certificate. Live UDP connection, expiry and revocation tests remain
+required on the deployed upstream binary. The app's current engine can send
+username/password, but config wiring must be implemented in the app chat.
 
 Add a second authentication choice, **Certificate account**, alongside **Username
 and password**. Import this schema; do not send it through the existing
@@ -61,8 +95,9 @@ an end-to-end app test are required before this mode can be used.
 
 Supported paths: SSH, SSH WebSocket, SSL Direct, SSL WebSocket, BHTTP, HCR plain/
 TLS, and SlowDNS/DNSTT through their configured OpenSSH backend. The transport
-itself stays unchanged. Dropbear, UDP Custom, SocksIP UDP, OpenVPN, WireGuard and
-Hysteria do not gain certificate support from this feature. Readiness checks
+itself stays unchanged. UDP Custom uses the separate generated password described above. Dropbear,
+SocksIP UDP, OpenVPN, WireGuard and Hysteria do not gain certificate support
+from this feature. Readiness checks
 reject gateways still routed to Dropbear; audit before issuing credentials.
 
 The CA private key stays on the VPS and is never included in the bundle. The

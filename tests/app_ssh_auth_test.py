@@ -69,6 +69,9 @@ class AppSshAuthTest(unittest.TestCase):
         stack.enter_context(patch.object(self.m, 'account', return_value=(self.user, self.expiry)))
         stack.enter_context(patch.object(self.m, 'backend_policy'))
         stack.enter_context(patch.object(self.m, 'transport_policy'))
+        stack.enter_context(patch.object(self.m, 'configure_udp_password', return_value=dict(
+            authMethod='password', username='eddy', password='synthetic-udp-secret', portRange='50001-65535')))
+        stack.enter_context(patch.object(self.m, 'disable_udp_password'))
         stack.enter_context(patch.object(self.m, 'authority', return_value=self.public))
         stack.enter_context(patch.object(self.m, 'authorized_file', self.authorized))
         return stack
@@ -86,6 +89,8 @@ class AppSshAuthTest(unittest.TestCase):
             self.assertEqual(data['type'], 'eng-ssh-account-bundle')
             self.assertEqual(data['genPolicy']['SSHAuthMethod'], 'account_certificate')
             self.assertNotIn('PRIVATE KEY', json.dumps(self.m.read_db()))
+            self.assertNotIn('synthetic-udp-secret', json.dumps(self.m.read_db()))
+            self.assertEqual(data['udpCustom']['password'], 'synthetic-udp-secret')
             private = self.auth / 'check-key'
             private.write_bytes(data['privateKey'].encode())
             if os.name != 'nt':
@@ -107,6 +112,7 @@ class AppSshAuthTest(unittest.TestCase):
             self.assertNotEqual(data['privateKey'], (self.auth / 'ca').read_text())
             self.m.revoke(argparse.Namespace(username='eddy', device='certificate-account'))
             self.assertFalse(path.exists())
+            self.m.disable_udp_password.assert_called_once_with('eddy')
             with self.assertRaises((ValueError, FileNotFoundError)):
                 self.m.read_bundle('eddy')
 
@@ -174,6 +180,51 @@ class AppSshAuthTest(unittest.TestCase):
         self.assertIn('active\tactive', output.getvalue())
         self.assertIn('expired\texpired', output.getvalue())
         self.assertIn('revoked\trevoked', output.getvalue())
+
+    def test_pasted_bundle_validation_requires_private_key_and_rejects_oversize(self):
+        import io
+        data = dict(schema=1, type='eng-ssh-account-bundle', authMethod='openssh-user-certificate',
+                    privateKeyIncluded=True, privateKey='test-fixture',
+                    publicKey=self.m.public_key((self.base / 'device-ecdsa.pub').read_text()))
+        self.assertEqual(self.m.read_pasted_bundle(io.StringIO(json.dumps(data) + '\nEND\n')), data)
+        for changed in (dict(data, privateKeyIncluded=False), dict(data, type='wrong')):
+            with self.assertRaises(ValueError):
+                self.m.read_pasted_bundle(io.StringIO(json.dumps(changed)))
+        with self.assertRaises(ValueError):
+            self.m.read_pasted_bundle(io.StringIO('x' * 65537))
+
+    @unittest.skipIf(os.name == 'nt', 'native Windows OpenSSH rejects imported fixture file ACLs')
+    def test_pasted_bundle_reuses_key_but_gets_local_identity_and_ca(self):
+        args = self.bundle_args()
+        args.bundle_data = dict(privateKey=(self.base / 'device-ecdsa').read_text(),
+                                publicKey=(self.base / 'device-ecdsa.pub').read_text())
+        with self.patches(), patch.object(self.m, 'policy_module'), patch.object(
+                self.m, 'pin_policy', return_value={'genPolicy': {}}):
+            path = self.m.create_bundle(args)
+            data = json.loads(path.read_text())
+            self.assertEqual(data['publicKey'], self.m.public_key(args.bundle_data['publicKey']))
+            self.assertEqual(data['caPublicKey'], self.public)
+            self.assertEqual(data['username'], 'eddy')
+            self.assertEqual(data['udpCustom']['username'], 'eddy')
+
+    def test_pasted_mismatched_key_never_authorizes_a_certificate(self):
+        args = self.bundle_args()
+        args.bundle_data = dict(privateKey='fixture', publicKey=(self.base / 'device-ecdsa.pub').read_text())
+        with self.patches(), patch.object(self.m, 'policy_module'), patch.object(
+                self.m, 'pin_policy', return_value={'genPolicy': {}}), patch.object(
+                self.m, 'run', return_value=SimpleNamespace(stdout=(self.base / 'device.pub').read_text())):
+            with self.assertRaisesRegex(ValueError, 'do not match'):
+                self.m.create_bundle(args)
+            self.assertEqual(self.m.read_db()['devices'], [])
+            self.assertFalse(self.m.bundle_path('eddy').exists())
+
+    def test_udp_secret_is_hashed_without_plaintext_process_arguments(self):
+        with patch.object(self.m.subprocess, 'run', return_value=SimpleNamespace(stdout='$6$salt$hash')) as execute, patch.object(self.m, 'run') as run:
+            value = self.m.configure_udp_password('eddy')
+            self.assertGreaterEqual(len(value['password']), 40)
+            self.assertEqual(execute.call_args.kwargs['input'], value['password'] + '\n')
+            self.assertNotIn(value['password'], str(execute.call_args.args))
+            run.assert_called_once_with('usermod', '-p', '$6$salt$hash', 'eddy')
 
     def test_real_certificate_signing_expiry_and_restricted_forwarding(self):
         with self.patches():

@@ -45,6 +45,8 @@ class MenuServicesTest(unittest.TestCase):
             ('03\ncustomer1\n00\n', 'app-ssh-auth.sh revoke customer1 certificate-account'),
             ('04\n00\n', 'app-ssh-auth.sh bundle-list'),
             ('05\ncustomer1\n00\n', 'app-ssh-auth.sh bundle-export customer1'),
+            ('06\ncustomer1\n30\n00\n', 'certificate-accounts.sh import customer1 30'),
+            ('07\ncustomer1\n00\n', 'certificate-details.sh customer1'),
         ]
         for data, expected in cases:
             for exit_code in (0, 1):
@@ -59,6 +61,38 @@ class MenuServicesTest(unittest.TestCase):
                     self.assertIn('CALL /fixture/' + expected, result.stdout)
                     self.assertIn('RETURNED', result.stdout)
                     self.assertNotIn('Invalid option', result.stdout)
+
+    def test_certificate_details_prints_endpoints_without_private_credentials(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            (folder / 'bhttp.env').write_bytes(b'BHTTP_PORTS="90 8180 8081"\n')
+            (folder / 'hcr.env').write_bytes(b'HCR_PORT=8881\n')
+            (folder / 'hcr-tls.env').write_bytes(b'HCR_TLS_PORT=8444\n')
+            (folder / 'service-options.env').write_bytes(b'V6_SLOWDNS_NS=ns.example.test\n')
+            source = (ROOT / 'certificate-details.sh').read_text(encoding='utf-8')
+            source = '\n'.join(line for line in source.splitlines() if not line.startswith('[[ $EUID'))
+            mocks = ("export V6_STATE_DIR='" + folder.as_posix() + "'\n"
+                     + r"""
+bash() { return 0; }
+curl() { printf '192.0.2.5'; }
+jq() {
+ case "$*" in
+  *primaryDomain*) printf example.test ;;
+  *validBefore*) printf '2030-01-01T00:00:00+00:00' ;;
+  *udpCustom.password*) return 0 ;;
+  *) return 1 ;;
+ esac
+}
+set -- account1
+""")
+            result = self.run_shell(mocks + source)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            for expected in ('account1', 'example.test', '192.0.2.5', '90, 8180, 8081',
+                             '8881', '8444', '50001-65535', 'ns.example.test', 'Certificate'):
+                self.assertIn(expected, result.stdout)
+            self.assertNotIn('PRIVATE KEY', result.stdout)
+            self.assertNotIn('SocksIP', result.stdout)
+            self.assertNotIn('Dropbear', result.stdout)
 
     def test_padded_choices_are_decimal_and_invalid_input_is_literal(self):
         for value, expected in (("0", "0"), ("00", "0"), ("01", "1"),

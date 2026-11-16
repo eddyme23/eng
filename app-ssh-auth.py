@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import stat
 import struct
 import subprocess
@@ -351,6 +352,8 @@ def revoke(args):
         user = None
     if user is not None and (user.pw_uid < 1000 or user.pw_uid == 65534):
         raise ValueError('Refusing a root/system account')
+    if user is not None and record['device'] == 'certificate-account':
+        disable_udp_password(args.username)
     record['status'] = 'revoked'
     record['revokedAt'] = datetime.now(timezone.utc).isoformat()
     if user is None:
@@ -425,6 +428,48 @@ def read_bundle(username):
     return data, matches[0]
 
 
+def read_pasted_bundle(stream):
+    chunks = []
+    size = 0
+    while True:
+        line = stream.readline(65537)
+        if not line or line.strip() == 'END':
+            break
+        size += len(line.encode('utf-8'))
+        if size > 65536:
+            raise ValueError('Pasted bundle exceeds 64 KiB')
+        chunks.append(line)
+    data = json.loads(''.join(chunks))
+    if (not isinstance(data, dict) or data.get('schema') != 1 or
+            data.get('type') != 'eng-ssh-account-bundle' or
+            data.get('authMethod') != 'openssh-user-certificate' or
+            data.get('privateKeyIncluded') is not True or
+            not isinstance(data.get('privateKey'), str) or
+            not isinstance(data.get('publicKey'), str)):
+        raise ValueError('Paste a complete ENG account bundle including its matching private key')
+    if public_key(data['publicKey']).split()[0] != 'ecdsa-sha2-nistp256':
+        raise ValueError('Imported account keys must be P-256')
+    return data
+
+
+def disable_udp_password(username):
+    # Account revocation must also invalidate the UDP password carried in JSON.
+    run('usermod', '-L', identifier(username))
+
+
+def configure_udp_password(username):
+    password = secrets.token_urlsafe(36)
+    # No plaintext secret in process arguments or public account output.
+    result = subprocess.run(['openssl', 'passwd', '-6', '-stdin'], input=password + '\n',
+                            capture_output=True, text=True, check=True, timeout=30)
+    hashed = result.stdout.strip()
+    if not re.fullmatch(r'\$6\$[^\s:]+', hashed):
+        raise ValueError('Failed to generate UDP password hash')
+    run('usermod', '-p', hashed, identifier(username))
+    return dict(authMethod='password', username=username, password=password,
+                portRange='50001-65535')
+
+
 def create_bundle(args):
     # Caller explicitly requests certificate-only policy for this managed identity.
     account(args.username)
@@ -438,13 +483,24 @@ def create_bundle(args):
     pins['genPolicy']['SSHAuthMethod'] = 'account_certificate'
     with tempfile.TemporaryDirectory(dir=AUTH) as directory:
         key = Path(directory) / 'account'
-        run(KEYGEN, '-q', '-t', 'ecdsa', '-b', '256', '-N', '', '-f', key)
+        imported = getattr(args, 'bundle_data', None)
+        if imported is None:
+            run(KEYGEN, '-q', '-t', 'ecdsa', '-b', '256', '-N', '', '-f', key)
+        else:
+            atomic(key, imported['privateKey'].replace('\r\n', '\n').encode())
+            actual = public_key(run(KEYGEN, '-y', '-P', '', '-f', key).stdout)
+            if actual != public_key(imported['publicKey']):
+                raise ValueError('Imported private and public keys do not match')
+            # Foreign CAs are never trusted. Root explicitly imports the key;
+            # ENG issues a NEW local certificate with the selected name/expiry.
+            atomic(Path(str(key) + '.pub'), (actual + '\n').encode())
         result = enroll(SimpleNamespace(username=args.username, device='certificate-account',
                          public_key=Path(str(key) + '.pub'), days=args.days, generated_bundle=True))
         try:
             policy_module().set_mode(manager(), args.username, 'certificates-only')
             result.update(type='eng-ssh-account-bundle', privateKeyIncluded=True,
                           privateKey=key.read_text(), genPolicy=pins['genPolicy'])
+            result['udpCustom'] = configure_udp_password(args.username)
             atomic(bundle_path(args.username), (json.dumps(result, indent=2) + '\n').encode())
         except BaseException:
             revoke(SimpleNamespace(username=args.username, device='certificate-account'))
@@ -469,6 +525,8 @@ def renew_bundle(args):
             write(edit_lines(before, record['id'], entry(record, authority())))
             save_db(db)
             policy_module().sync(manager(), db, args.username)
+            if 'udpCustom' not in data:
+                data['udpCustom'] = configure_udp_password(args.username)
             atomic(bundle_path(args.username), (json.dumps(data, indent=2) + '\n').encode())
         except BaseException:
             write(before)
@@ -499,7 +557,7 @@ def list_certificate_accounts():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='action', required=True)
-    for action in ('bundle-create', 'bundle-renew', 'bundle-export', 'bundle-check'):
+    for action in ('bundle-create', 'bundle-import', 'bundle-renew', 'bundle-export', 'bundle-check'):
         bundle = commands.add_parser(action)
         bundle.add_argument('username')
         bundle.add_argument('--days', type=int, default=30)
@@ -531,6 +589,9 @@ def main():
     args = parser.parse_args()
     if sys.platform != 'linux' or os.geteuid() != 0:
         parser.error('Run as root on the Linux VPS')
+    if args.action == 'bundle-import':
+        print('Paste ENG JSON, then END on its own line. A new local certificate will be issued.', file=sys.stderr)
+        args.bundle_data = read_pasted_bundle(sys.stdin)
     import fcntl
     os.umask(0o077)
     if AUTH.is_symlink():
@@ -549,7 +610,7 @@ def main():
             fcntl.flock(accounts_lock, fcntl.LOCK_EX)
         lock = stack.enter_context((AUTH / 'lock').open('a'))
         fcntl.flock(lock, fcntl.LOCK_EX)
-        if args.action == 'bundle-create':
+        if args.action in ('bundle-create', 'bundle-import'):
             print('Private Gen bundle saved:', create_bundle(args))
         elif args.action == 'bundle-renew':
             print('Renewed private Gen bundle saved:', renew_bundle(args))
