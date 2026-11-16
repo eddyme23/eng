@@ -47,3 +47,5 @@ operator-approved per-device OpenSSH certificates alongside existing password
 accounts. TG/Gen pin export and optional certificate-only SSH account policies
 are available; ordinary accounts retain password access. No automatic enrollment
 or app-identity attestation is included.
+
+Operator-generated certificate accounts and private Gen bundles: [Certificate accounts](CERTIFICATE-ACCOUNTS.md).

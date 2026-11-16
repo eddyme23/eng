@@ -13,6 +13,11 @@ Play Integrity, hardware attestation, or proof that an uploaded key was
 created by your app. Enrollment approval is an operator trust decision.
 Do not describe this feature as app-only enforcement in the app/generator.
 
+> This page describes the existing phone-generated device-key mode. For the
+> requested ENG-generated credential imported into Gen, use
+> [Certificate accounts](CERTIFICATE-ACCOUNTS.md). That separate mode intentionally
+> exports the account private key; this device-key mode does not.
+
 ## Credential model
 
 - One per-VPS Ed25519 CA, generated on first enrollment and stored in
@@ -223,3 +228,5 @@ login, TCP forwarding, wrong key/user, expiry, device revocation, reconnects,
 and password-client compatibility on a Linux VPS through every transport.
 Local tests use real OpenSSH certificate signing/inspection, but the Windows
 development host cannot establish the Linux sshd/PAM end-to-end result.
+
+Operator-generated certificate accounts and private Gen bundles: [Certificate accounts](CERTIFICATE-ACCOUNTS.md).

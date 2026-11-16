@@ -73,6 +73,90 @@ class AppSshAuthTest(unittest.TestCase):
         stack.enter_context(patch.object(self.m, 'authorized_file', self.authorized))
         return stack
 
+    def bundle_args(self):
+        return argparse.Namespace(username='eddy', days=365, host_key=self.base / 'device.pub')
+
+    def test_generated_bundle_has_matching_private_key_and_restricted_signed_certificate(self):
+        with self.patches(), patch.dict(sys.modules, {'pwd': SimpleNamespace(getpwnam=lambda _: self.user)}), patch.object(self.m, 'policy_module') as policy, patch.object(
+                self.m, 'pin_policy', return_value={'genPolicy': {'SSHAuthMethod': 'device_certificate'}}):
+            path = self.m.create_bundle(self.bundle_args())
+            data = json.loads(path.read_text())
+            policy.return_value.set_mode.assert_called_once()
+            self.assertTrue(data['privateKeyIncluded'])
+            self.assertEqual(data['type'], 'eng-ssh-account-bundle')
+            self.assertEqual(data['genPolicy']['SSHAuthMethod'], 'account_certificate')
+            self.assertNotIn('PRIVATE KEY', json.dumps(self.m.read_db()))
+            private = self.auth / 'check-key'
+            private.write_bytes(data['privateKey'].encode())
+            if os.name != 'nt':
+                private.chmod(0o600)
+                self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            from cryptography.hazmat.primitives import serialization
+            key = serialization.load_ssh_private_key(data['privateKey'].encode(), password=None)
+            public = key.public_key().public_bytes(serialization.Encoding.OpenSSH,
+                                                   serialization.PublicFormat.OpenSSH).decode()
+            self.assertEqual(self.m.public_key(public), data['publicKey'])
+            cert = self.auth / 'check-cert.pub'
+            cert.write_text(data['certificate'])
+            detail = subprocess.run([KEYGEN, '-L', '-f', str(cert)], check=True,
+                                   capture_output=True, text=True).stdout
+            self.assertIn('force-command /bin/false', detail)
+            self.assertIn('permit-port-forwarding', detail)
+            self.assertNotIn('permit-pty', detail)
+            self.assertLessEqual(datetime.fromisoformat(data['validBefore']), self.expiry)
+            self.assertNotEqual(data['privateKey'], (self.auth / 'ca').read_text())
+            self.m.revoke(argparse.Namespace(username='eddy', device='certificate-account'))
+            self.assertFalse(path.exists())
+            with self.assertRaises((ValueError, FileNotFoundError)):
+                self.m.read_bundle('eddy')
+
+    def test_bundle_renewal_preserves_identity_key_and_rejects_revocation(self):
+        with self.patches(), patch.dict(sys.modules, {'pwd': SimpleNamespace(getpwnam=lambda _: self.user)}), patch.object(self.m, 'policy_module'), patch.object(
+                self.m, 'pin_policy', return_value={'genPolicy': {}}):
+            args = self.bundle_args()
+            args.days = 1
+            path = self.m.create_bundle(args)
+            old = json.loads(path.read_text())
+            args.days = 2
+            self.m.renew_bundle(args)
+            new = json.loads(path.read_text())
+            self.assertEqual(new['privateKey'], old['privateKey'])
+            self.assertEqual(new['deviceId'], old['deviceId'])
+            self.assertGreater(new['validBefore'], old['validBefore'])
+            self.assertEqual(len(self.m.read_db()['devices']), 1)
+            self.m.revoke(argparse.Namespace(username='eddy', device='certificate-account'))
+            with self.assertRaises((ValueError, FileNotFoundError)):
+                self.m.renew_bundle(args)
+
+    def test_bundle_policy_failure_leaves_no_usable_credential(self):
+        with self.patches(), patch.dict(sys.modules, {'pwd': SimpleNamespace(getpwnam=lambda _: self.user)}), patch.object(self.m, 'policy_module') as policy, patch.object(
+                self.m, 'pin_policy', return_value={'genPolicy': {}}):
+            policy.return_value.set_mode.side_effect = ValueError('sshd validation failed')
+            with self.assertRaisesRegex(ValueError, 'sshd validation'):
+                self.m.create_bundle(self.bundle_args())
+            self.assertFalse(self.m.bundle_path('eddy').exists())
+            self.assertEqual(self.m.read_db()['devices'][0]['status'], 'revoked')
+            self.assertEqual(self.content, self.before)
+
+    def test_bundle_renewal_write_failure_restores_trust_and_old_export(self):
+        with self.patches(), patch.object(self.m, 'policy_module'), patch.object(
+                self.m, 'pin_policy', return_value={'genPolicy': {}}):
+            args = self.bundle_args()
+            args.days = 1
+            path = self.m.create_bundle(args)
+            previous_file, previous_db, previous_keys = path.read_bytes(), self.m.read_db(), self.content
+            atomic = self.m.atomic
+            def fail_bundle(target, data):
+                if Path(target) == path:
+                    raise OSError('disk full')
+                return atomic(target, data)
+            args.days = 2
+            with patch.object(self.m, 'atomic', side_effect=fail_bundle), self.assertRaises(OSError):
+                self.m.renew_bundle(args)
+            self.assertEqual(path.read_bytes(), previous_file)
+            self.assertEqual(self.m.read_db(), previous_db)
+            self.assertEqual(self.content, previous_keys)
+
     def test_real_certificate_signing_expiry_and_restricted_forwarding(self):
         with self.patches():
             result = self.m.enroll(self.args)

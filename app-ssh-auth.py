@@ -72,7 +72,7 @@ def save_db(db):
 
 def identifier(value):
     if not re.fullmatch(r'[a-z0-9_][a-z0-9_-]{0,31}', value):
-        raise ValueError('Use 1–32 lowercase letters, numbers, underscores or hyphens')
+        raise ValueError('Use 1â€“32 lowercase letters, numbers, underscores or hyphens')
     return value
 
 
@@ -263,8 +263,8 @@ def authorized_file(user):
 def enroll(args):
     user, account_expiry = account(args.username)
     identifier(args.device)
-    if not 1 <= args.days <= 90:
-        raise ValueError('Certificate validity must be 1–90 days, capped by account expiry')
+    if not 1 <= args.days <= (3650 if getattr(args, 'generated_bundle', False) else 90):
+        raise ValueError('Certificate validity must be 1â€“90 days, capped by account expiry')
     db = read_db()
     previous_db = json.loads(json.dumps(db))
     if any(d['username'] == args.username and d['device'] == args.device for d in db['devices']):
@@ -281,22 +281,8 @@ def enroll(args):
     backend_policy(user, public.split()[0])
     transport_policy()
     ca = authority()
-    now = datetime.now(timezone.utc).replace(microsecond=0)
-    end = min(now + timedelta(days=args.days), account_expiry)
-    start = now - timedelta(minutes=2)
-    identity = uuid.uuid4().hex
-    record = dict(id=identity, username=args.username, device=args.device,
-                  principal='eng-app-' + identity, status='active', publicKey=public,
-                  validAfter=start.isoformat(), validBefore=end.isoformat())
-    with tempfile.TemporaryDirectory(dir=AUTH) as directory:
-        key = Path(directory) / 'device.pub'
-        key.write_text(public + '\n')
-        run(KEYGEN, '-l', '-f', key)  # Check the complete public-key structure.
-        run(KEYGEN, '-q', '-s', AUTH / 'ca', '-I', 'eng-app:' + identity,
-            '-n', record['principal'], '-V', start.strftime('%Y%m%d%H%M%S') + ':' + end.strftime('%Y%m%d%H%M%S'),
-            '-z', str(int(identity[:15], 16)), '-O', 'clear', '-O', 'permit-port-forwarding',
-            '-O', 'force-command=/bin/false', key)
-        record['certificate'] = (Path(directory) / 'device-cert.pub').read_text().strip()
+    record = sign_device(args.username, args.device, public, args.days, account_expiry)
+    identity = record['id']
     db['devices'].append(record)
     with authorized_file(user) as (before, write):
         write(edit_lines(before, identity, entry(record, ca)))
@@ -308,6 +294,36 @@ def enroll(args):
             save_db(previous_db)
             raise
     return package(record, ca)
+
+
+def sign_device(username, label, public, days, not_after, identity=None):
+    """Shared signer; callers authorize enrollment and commit trust separately."""
+    if not 1 <= days <= 3650:
+        raise ValueError('Invalid certificate validity')
+    identifier(username)
+    identifier(label)
+    public = public_key(public)
+    identity = identity or uuid.uuid4().hex
+    if not re.fullmatch(r'[a-f0-9]{32}', identity):
+        raise ValueError('Invalid device identity')
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    end = min(now + timedelta(days=days), not_after)
+    if end <= now:
+        raise ValueError('Account or plan expired')
+    start = now - timedelta(minutes=2)
+    record = dict(id=identity, username=username, device=label,
+                  principal='eng-app-' + identity, status='active', publicKey=public,
+                  validAfter=start.isoformat(), validBefore=end.isoformat())
+    with tempfile.TemporaryDirectory(dir=AUTH) as directory:
+        key = Path(directory) / 'device.pub'
+        key.write_text(public + '\n')
+        run(KEYGEN, '-l', '-f', key)  # Check the complete public-key structure.
+        run(KEYGEN, '-q', '-s', AUTH / 'ca', '-I', 'eng-app:' + identity,
+            '-n', record['principal'], '-V', start.strftime('%Y%m%d%H%M%S') + ':' + end.strftime('%Y%m%d%H%M%S'),
+            '-z', str(int(identity[:15], 16)), '-O', 'clear', '-O', 'permit-port-forwarding',
+            '-O', 'force-command=/bin/false', key)
+        record['certificate'] = (Path(directory) / 'device-cert.pub').read_text().strip()
+    return record
 
 
 def package(record, ca):
@@ -350,6 +366,10 @@ def revoke(args):
                 write(before)
                 save_db(previous_db)
                 raise
+    path = bundle_path(args.username)
+    if path.exists() and not path.is_symlink():
+        if json.loads(path.read_text()).get('deviceId') == record['id']:
+            path.unlink()
     print('Device revoked for new SSH logins. Existing sessions are not terminated.')
 
 
@@ -389,9 +409,83 @@ def purge_account(username):
         path.chmod(0o644)
 
 
+def bundle_path(username):
+    return AUTH / ('bundle-' + identifier(username) + '.json')
+
+
+def read_bundle(username):
+    path = bundle_path(username)
+    if path.is_symlink():
+        raise ValueError('Unsafe bundle path')
+    data = json.loads(path.read_text())
+    matches = [d for d in read_db()['devices'] if d['username'] == username and
+               d['id'] == data['deviceId'] and d['status'] == 'active']
+    if len(matches) != 1:
+        raise ValueError('Certificate account has been revoked or removed')
+    return data, matches[0]
+
+
+def create_bundle(args):
+    # Caller explicitly requests certificate-only policy for this managed identity.
+    account(args.username)
+    if not 1 <= args.days <= 3650:
+        raise ValueError('Certificate validity must be 1-3650 days')
+    if any(d['username'] == args.username for d in read_db()['devices']):
+        raise ValueError('Account already has credentials; renew or use a new account name')
+    if bundle_path(args.username).exists() or bundle_path(args.username).is_symlink():
+        raise ValueError('Bundle already exists')
+    pins = pin_policy(args.username, args.host_key)
+    pins['genPolicy']['SSHAuthMethod'] = 'account_certificate'
+    with tempfile.TemporaryDirectory(dir=AUTH) as directory:
+        key = Path(directory) / 'account'
+        run(KEYGEN, '-q', '-t', 'ecdsa', '-b', '256', '-N', '', '-f', key)
+        result = enroll(SimpleNamespace(username=args.username, device='certificate-account',
+                         public_key=Path(str(key) + '.pub'), days=args.days, generated_bundle=True))
+        try:
+            policy_module().set_mode(manager(), args.username, 'certificates-only')
+            result.update(type='eng-ssh-account-bundle', privateKeyIncluded=True,
+                          privateKey=key.read_text(), genPolicy=pins['genPolicy'])
+            atomic(bundle_path(args.username), (json.dumps(result, indent=2) + '\n').encode())
+        except BaseException:
+            revoke(SimpleNamespace(username=args.username, device='certificate-account'))
+            raise
+    return bundle_path(args.username)
+
+
+def renew_bundle(args):
+    data, old = read_bundle(args.username)
+    user, expiry = account(args.username)
+    backend_policy(user, old['publicKey'].split()[0])
+    transport_policy()
+    # Preserve the key and identity so Gen can replace the credential predictably.
+    record = sign_device(args.username, old['device'], old['publicKey'], args.days, expiry, old['id'])
+    db = read_db()
+    previous = json.loads(json.dumps(db))
+    db['devices'] = [record if d['id'] == old['id'] else d for d in db['devices']]
+    data.update(package(record, authority()))
+    data.update(type='eng-ssh-account-bundle', privateKeyIncluded=True)
+    with authorized_file(user) as (before, write):
+        try:
+            write(edit_lines(before, record['id'], entry(record, authority())))
+            save_db(db)
+            policy_module().sync(manager(), db, args.username)
+            atomic(bundle_path(args.username), (json.dumps(data, indent=2) + '\n').encode())
+        except BaseException:
+            write(before)
+            save_db(previous)
+            policy_module().sync(manager(), previous, args.username)
+            raise
+    return bundle_path(args.username)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='action', required=True)
+    for action in ('bundle-create', 'bundle-renew', 'bundle-export', 'bundle-check'):
+        bundle = commands.add_parser(action)
+        bundle.add_argument('username')
+        bundle.add_argument('--days', type=int, default=30)
+        bundle.add_argument('--host-key', type=Path, default=Path('/etc/ssh/ssh_host_ed25519_key.pub'))
     approve = commands.add_parser('enroll')
     approve.add_argument('username')
     approve.add_argument('device')
@@ -436,7 +530,19 @@ def main():
             fcntl.flock(accounts_lock, fcntl.LOCK_EX)
         lock = stack.enter_context((AUTH / 'lock').open('a'))
         fcntl.flock(lock, fcntl.LOCK_EX)
-        if args.action == 'enroll':
+        if args.action == 'bundle-create':
+            print('Private Gen bundle saved:', create_bundle(args))
+        elif args.action == 'bundle-renew':
+            print('Renewed private Gen bundle saved:', renew_bundle(args))
+        elif args.action == 'bundle-check':
+            read_bundle(args.username)
+        elif args.action == 'bundle-export':
+            account(args.username)
+            data, _ = read_bundle(args.username)
+            if datetime.fromisoformat(data['validBefore']) <= datetime.now(timezone.utc):
+                raise ValueError('Certificate expired; renew first')
+            print(json.dumps(data, indent=2))
+        elif args.action == 'enroll':
             print(json.dumps(enroll(args), indent=2))
         elif args.action == 'revoke':
             revoke(args)

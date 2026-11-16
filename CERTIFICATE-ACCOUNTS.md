@@ -1,0 +1,74 @@
+# Certificate accounts for TG / Gen
+
+ENG supports two independent account types: existing username/password accounts,
+and operator-generated OpenSSH certificate accounts. No enrollment endpoint,
+access code, Google Cloud credentials, or Play Integrity is involved.
+
+## VPS usage
+
+Update the checkout and run `bash ./refresh-menu-v6.sh`. In the menu select
+SSH Account Management -> App certificate accounts -> Create certificate account
+for Gen. Choose a NEW account name and validity (1-3650 days).
+
+Equivalent commands:
+
+```bash
+bash ./certificate-accounts.sh create customer1 365
+bash ./certificate-accounts.sh renew customer1 365
+bash ./app-ssh-auth.sh bundle-export customer1
+bash ./app-ssh-auth.sh revoke customer1 certificate-account
+```
+
+Creation generates a random, undisclosed OS password, signs a fresh P-256 key,
+and applies certificate-only SSH policy to that account. Other accounts retain
+password access. On failure no bundle is issued; remove the new account through
+SSH Account Management before retrying. Do not reuse an existing password account
+with the low-level `bundle-create` command: it explicitly converts that account.
+
+The private JSON is saved to `/etc/frimps-app-auth/bundle-customer1.json` (root
+only, mode 0600 inside mode 0700 directory). Transfer it securely to Gen. Export
+prints the private credential deliberately; do not paste it in public logs.
+Renewal extends the OS account, re-signs its same key and updates this file.
+Import the replacement in Gen and redistribute the updated configuration.
+Certificate validity is capped by OS account expiry at midnight UTC. Renewal
+of an unexpired account extends its existing expiry; certificate lifetime starts
+at renewal time. Revocation stops new logins, removes the local bundle and does
+not disconnect authenticated sessions. Account deletion uses the existing purge.
+Older renewed certificates remain valid until expiry or account revocation.
+
+## App / Gen handoff
+
+Add a second authentication choice, **Certificate account**, alongside **Username
+and password**. Import this schema; do not send it through the existing
+phone-generated nonexportable-key/device-certificate importer:
+
+- `schema`: 1, `type`: `eng-ssh-account-bundle`
+- `authMethod`: `openssh-user-certificate`
+- `username`: internal SSH identity; users need not enter it separately
+- `privateKeyIncluded`: true; `privateKey`: PEM/OpenSSH P-256 private key
+- `publicKey`, `certificate`, `caPublicKey`, `caFingerprint`
+- `deviceId`, `deviceLabel`, `validAfter`, `validBefore`
+- `genPolicy.SSHAuthMethod`: `account_certificate`
+- `genPolicy.SSHCertificateCA`, `genPolicy.SSHHostKeyPin`: SHA256 pins
+
+Gen must protect the whole credential when exporting configs and avoid logging
+it. The app must validate key/certificate correspondence, CA signature, principal,
+expiry and server host-key pin, then sign SSH authentication with the imported
+private key and present the user certificate. Keep certificate-only mode fail
+closed: never silently fall back to a password. Imported software keys require a
+separate app credential store; they are not Android-generated Keystore keys.
+ENG does not modify app or Gen code. Their importer/authentication changes and
+an end-to-end app test are required before this mode can be used.
+
+Supported paths: SSH, SSH WebSocket, SSL Direct, SSL WebSocket, BHTTP, HCR plain/
+TLS, and SlowDNS/DNSTT through their configured OpenSSH backend. The transport
+itself stays unchanged. Dropbear, UDP Custom, SocksIP UDP, OpenVPN, WireGuard and
+Hysteria do not gain certificate support from this feature. Readiness checks
+reject gateways still routed to Dropbear; audit before issuing credentials.
+
+The CA private key stays on the VPS and is never included in the bundle. The
+exported account private key is intentionally portable: anyone with the bundle
+can use that account in a compatible client. This is not app attestation or a
+restriction exclusive to one APK. Existing device-generated certificate mode is
+retained separately. Test real login, browsing and reconnects on each transport
+before distributing production configurations.

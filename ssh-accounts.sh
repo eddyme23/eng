@@ -132,7 +132,7 @@ fi
 
 valid_user "$user" || die "invalid username"
 case "$action" in
-  create)
+  create|create-certificate)
     valid_days "$days" || die "days must be a positive integer"
     managed "$user" && die "account already managed by v6"
     if account_uid_by_name "$user" >/dev/null; then
@@ -141,7 +141,11 @@ case "$action" in
       lookup_status=$?
       [[ $lookup_status -eq 3 ]] || die "Linux account lookup failed"
     fi
-    read -r -p "Password for $user: " password
+    if [[ $action == create-certificate ]]; then
+      password="$(openssl rand -hex 48)"
+    else
+      read -r -p "Password for $user: " password
+    fi
     [[ -n "$password" ]] || die "empty passwords are not allowed"
     expiry="$(date -u -d "+$days days" +%F)"
     hash="$(printf '%s' "$password" | openssl passwd -6 -stdin)"
@@ -151,6 +155,11 @@ case "$action" in
       die "account creation failed and was rolled back"
     fi
     commit "$(jq --arg name "$user" --arg expiry "$expiry" '. + [{name:$name,expiresAt:$expiry}]' "$store")"
+    if [[ $action == create-certificate ]]; then
+      unset password hash
+      echo "Created certificate account identity: $user (no customer password)."
+      exit 0
+    fi
     domain="$(jq -r '.primaryDomain // empty' "$state_dir/routes.json")"
     slowdns_ns='Not configured'; [[ -r "$state_dir/service-options.env" ]] && source "$state_dir/service-options.env" && slowdns_ns="${V6_SLOWDNS_NS:-$slowdns_ns}"
     slowdns_ip="$(slowdns_public_ipv4)"
