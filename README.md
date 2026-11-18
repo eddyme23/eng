@@ -23,8 +23,8 @@ bash ./install-frimps.sh
 | SSH WebSocket | 80, 8080, 8880, 2082, 2086 |
 | SSH SSL and SSH WebSocket TLS | 443 |
 | OpenVPN Websocket | 80, 8080, 8880; path `/openvpn` |
-| OpenVPN TLS | 443; path `/openvpn` |
-| OpenVPN | TCP/UDP 1194; SSL 8433 |
+| OpenVPN TLS | 8433; path `/openvpn` |
+| OpenVPN | TCP/UDP 1194 |
 | BHTTP | 90, 8081, 8180 |
 | HCR | 8881 NTLS / 8444 TLS |
 | DNSTT | UDP/DoH/DoT 53 |
