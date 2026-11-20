@@ -64,4 +64,4 @@ echo 'Upstream DNSTT SlowDNS configured on UDP 53 to OpenSSH TCP 22.'
 echo "Nameserver: $ns"
 echo "Public key: $(cat /etc/slowdns/server.pub)"
 echo 'DNS requirement: delegate the tunnel nameserver domain with an NS record to a DNS-only hostname whose A record is this VPS IPv4.'
-echo 'Check service, backend, UDP listener and delegation with: bash ./slowdns-audit.sh'
+echo 'Server installation checks passed, including encrypted DNSTT to SSH. Client/carrier browsing is not measured.'

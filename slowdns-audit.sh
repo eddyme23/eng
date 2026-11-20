@@ -7,6 +7,10 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 state_dir="${V6_STATE_DIR:-/etc/frimps-v6}"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 failed=0
+probe_status=2
+dns_unverified=0
+if [[ -r "$state_dir/service-options.env" ]]; then source "$state_dir/service-options.env"; fi
+ns="${V6_SLOWDNS_NS:-}"
 check() { if "$@"; then printf '[OK] %s\n' "$*"; else printf '[FAIL] %s\n' "$*" >&2; failed=1; fi; }
 check systemctl is-enabled --quiet frimps-slowdns.service
 check systemctl is-active --quiet frimps-slowdns.service
@@ -46,9 +50,11 @@ if command -v nft >/dev/null; then
     failed=1
   fi
 fi
+# A real encrypted stream check; never installs a client or changes services.
+python3 "$script_dir/slowdns-audit-check.py" stream --domain "$ns"
+probe_status=$?
+if ((probe_status != 0 && probe_status != 2)); then failed=1; fi
 if [[ ${1:-} != --local ]]; then
-  if [[ -r "$state_dir/service-options.env" ]]; then source "$state_dir/service-options.env"; fi
-  ns="${V6_SLOWDNS_NS:-}"
   if [[ $ns =~ ^[A-Za-z0-9.-]+$ ]] && command -v dig >/dev/null; then
     echo "Tunnel domain: $ns"
     # Ask the parent authority for the delegation. The tunnel server itself
@@ -61,7 +67,7 @@ if [[ ${1:-} != --local ]]; then
     done
     records=''
     if [[ $authority =~ ^[A-Za-z0-9.-]+$ ]]; then
-      records="$(dig +time=2 +tries=1 @"$authority" NS "$ns" +norecurse +noall +answer +authority | awk '$4 == "NS" {print $5}')"
+      records="$(dig +time=2 +tries=1 @"$authority" NS "$ns" +norecurse +noall +answer +authority | awk -v owner="${ns%.}." 'tolower($1) == tolower(owner) && $4 == "NS" {print $5}' | head -n 4)"
     fi
     if [[ -n $records ]]; then
       printf 'Delegated NS targets:\n%s\n' "$records"
@@ -69,7 +75,9 @@ if [[ ${1:-} != --local ]]; then
         [[ $target =~ ^[A-Za-z0-9.-]+$ ]] || continue
         addresses="$(dig +time=2 +tries=1 +short A "$target")"
         printf 'NS target %s -> %s\n' "$target" "${addresses:-NO IPv4 ANSWER}"
-        [[ -n $addresses ]] || failed=1
+        printf '%s\n' "$addresses" | python3 "$script_dir/slowdns-audit-check.py" addresses
+        address_status=$?
+        if ((address_status == 2)); then dns_unverified=1; elif ((address_status != 0)); then failed=1; fi
       done <<< "$records"
     else
       echo '[FAIL] Could not confirm an NS delegation from the parent authority' >&2; failed=1
@@ -79,16 +87,26 @@ if [[ ${1:-} != --local ]]; then
   fi
 fi
 if recent_logs=$(journalctl -b -u frimps-slowdns.service --since '5 minutes ago' -n 200 --no-pager -o cat); then
-  printf '%s\n' "$recent_logs" | tail -n 20
   printf '%s\n' "$recent_logs" | python3 "$script_dir/slowdns-log-summary.py"
 else
   echo '[WARN] Recent SlowDNS logs unavailable; response-size and stream activity could not be inspected.' >&2
 fi
 if ((failed == 0)); then
-  echo '[INFO] Local SlowDNS checks passed. End-to-end tunnel, SSH login and browsing remain unverified.'
+  if ((probe_status == 0)); then
+    echo '[OK] SlowDNS server checks passed, including an encrypted stream to SSH.'
+  else
+    echo '[INFO] SlowDNS structural server checks passed; encrypted stream check unavailable.'
+  fi
+  if [[ ${1:-} == --local ]]; then
+    echo '[INFO] Public DNS delegation not checked in --local mode.'
+  elif ((dns_unverified)); then
+    echo '[WARN] DNS address alignment remains unverified.'
+  else
+    echo '[OK] Public DNS delegation and NS IPv4 alignment passed.'
+  fi
+  echo '[INFO] Client/carrier browsing is not measured by this server audit.'
+else
+  echo '[FAIL] SlowDNS server audit found a problem; inspect the failed check above.' >&2
+  echo 'For a reported connection/browsing problem: bash ./slowdns-flow-audit.sh SSH_USERNAME'
 fi
-echo 'Use the displayed DNS public key, the delegated tunnel domain, and a valid SSH account.'
-echo 'DNS NS targets must resolve to the VPS public IPv4. Provider/host firewalls must allow inbound UDP 53.'
-echo 'These checks do not establish a successful DNS tunnel, SSH password login, or client browsing.'
-echo 'If connected without browsing, run: bash ./slowdns-flow-audit.sh SSH_USERNAME'
 exit "$failed"

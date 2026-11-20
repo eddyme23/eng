@@ -29,7 +29,7 @@ class SlowdnsSummaryTest(unittest.TestCase):
         self.assertIn('10 rejection(s)', result)
         self.assertIn('unrelated probe', result)
         self.assertIn('Keep the server MTU unchanged', result)
-        self.assertIn('has not been verified', result)
+        self.assertIn('absence alone is not a server fault', result)
 
     def test_stream_activity_is_not_reported_as_successful_login(self):
         result = self.summary('begin session abc\nbegin stream abc:3\n')
@@ -39,7 +39,19 @@ class SlowdnsSummaryTest(unittest.TestCase):
     def test_empty_logs_do_not_imply_failure(self):
         result = self.summary('')
         self.assertNotIn('[WARN]', result)
-        self.assertIn('has not been verified', result)
+        self.assertIn('absence alone is not a server fault', result)
+
+    def test_failed_sessions_are_not_reported_as_healthy_streams(self):
+        result = self.summary('begin session abc\nbegin stream abc:3\nsession abc acceptStreams: chacha20poly1305: message authentication failed\n')
+        self.assertIn('encrypted authentication failures: 1', result)
+        self.assertIn('no healthy session', result)
+        self.assertNotIn('without sampled authentication failures', result)
+
+    def test_mixed_sessions_keep_errors_and_unaffected_streams_separate(self):
+        result = self.summary('begin stream good:3\nbegin stream bad:3\nsession bad acceptStreams: chacha20poly1305: message authentication failed\n')
+        self.assertIn('authentication failures: 1', result)
+        self.assertIn('Stream starts observed in 1 session(s)', result)
+        self.assertIn('do not identify a specific phone', result)
 
 
 @unittest.skipUnless(BASH, 'bash required')

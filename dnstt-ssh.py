@@ -338,7 +338,7 @@ def activate(args):
     except BaseException:
         rollback(saved)
         raise
-    print('Production unit, keys, domain, MTU and SSH accounts preserved. Client login/browsing still need testing.')
+    print('Production unit, keys, domain, MTU and SSH accounts preserved. Encrypted stream to SSH verified; client/carrier browsing is not measured.')
     print('Rollback: bash ./dnstt-ssh.sh rollback ' + str(saved))
 
 

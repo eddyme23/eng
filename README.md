@@ -39,3 +39,19 @@ bash ./install-frimps.sh
 
 
 Menu: `frimps-v6-menu` or `menu`.
+
+## SlowDNS automatic verification
+
+`bash ./slowdns-audit.sh` verifies the running service, keys, SSH backend and an
+actual encrypted DNSTT-to-SSH stream using the pinned/checksummed cached client.
+It also checks parent DNS delegation and whether delegated NS IPv4 addresses
+match the VPS (with public NAT-address discovery when needed). `--local` skips
+public DNS queries. Missing probe tools are reported as skipped, not verified;
+checksum failures and actual probe failures fail the audit. Checks never rebuild
+or restart the working server or change its keys, MTU, accounts or routing.
+
+Recent log summaries separate encrypted authentication failures from stream
+starts in other sessions. Empty logs are neutral. A successful encrypted server
+probe is not proof of phone/carrier browsing or SSH account authentication.
+Manual troubleshooting is only prompted when the audit finds a problem; use
+`slowdns-flow-audit.sh SSH_USERNAME` for a reported client/browsing issue.
