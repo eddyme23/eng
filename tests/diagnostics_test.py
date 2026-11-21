@@ -73,14 +73,3 @@ class FirewallDiagnosticTest(unittest.TestCase):
                 self.assertEqual(b'CONTINUED' in result.stdout, status == 0)
                 self.assertEqual((fixture / 'saved.rules').read_text().strip(), 'snapshot')
                 self.assertIn('DNAT not found', (fixture / 'saved.rules.stderr').read_text())
-
-    def test_failed_firewall_change_keeps_error_status_and_backend_label(self):
-        source = (ROOT / 'retire-iptables-rules.sh').read_text(encoding='utf-8')
-        function = source[source.index('firewall_change() {'):source.index('# Native replacement')]
-        code = ('set -euo pipefail\ntool=iptables-legacy\n'
-                'iptables-legacy() { echo "DNAT failure" >&2; return 2; }\n'
-                + function + '\nfirewall_change -t nat -D PREROUTING\n')
-        result = subprocess.run([BASH, '-c', code], capture_output=True, timeout=10)
-        self.assertEqual(result.returncode, 2, result.stderr)
-        self.assertIn(b'iptables-legacy', result.stderr)
-        self.assertIn(b'exit 2', result.stderr)

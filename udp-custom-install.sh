@@ -52,6 +52,8 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 EOF
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+bash "$script_dir/install-firewall-guard.sh"
 systemctl daemon-reload
 echo 'UDP Custom backend configured on UDP 36717; Frimps routes public UDP 50001-65535 to it.'
 printf 'Test UDP Custom on public UDP 53000 using the VPS IPv4 address and a managed SSH account.\n'

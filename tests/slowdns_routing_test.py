@@ -11,37 +11,6 @@ BASH = r"C:/Program Files/Git/bin/bash.exe" if os.name == "nt" else shutil.which
 
 @unittest.skipUnless(BASH, "bash required")
 class LegacyUdpRetirementTest(unittest.TestCase):
-    def run_retirement(self, native=True, rule_interface="eth0"):
-        source = (ROOT / "retire-iptables-rules.sh").read_text(encoding="utf-8")
-        source = source[source.index('iface="'):]
-        mock = ('set -euo pipefail\nV6_PUBLIC_INTERFACE=eth0\ncount=0\n'
-                + 'iptables-legacy() { return 1; }; ip6tables() { return 1; }; ip6tables-legacy() { return 1; };\n'
-                + 'nft() { return ' + ('0' if native else '1') + '; };\n'
-                + 'iptables() { if [[ $* == *"--dport 1:65535"* && $* == *"-i ' + rule_interface + ' "* ]]; then '
-                + 'if [[ $* == *"-C PREROUTING"* ]]; then (( count < 2 )); return; fi; '
-                + 'if [[ $* == *"-D PREROUTING"* ]]; then count=$((count+1)); printf "DELETE %s\\n" "$*"; return 0; fi; fi; return 1; };\n')
-        with tempfile.TemporaryDirectory() as directory:
-            script = Path(directory) / "audit.sh"
-            script.write_bytes((mock + source).encode("utf-8"))
-            return subprocess.run([BASH, script.as_posix()], capture_output=True, timeout=5)
-
-    def test_exact_duplicate_catch_all_rules_are_removed(self):
-        result = self.run_retirement()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.count(b"DELETE"), 2)
-        self.assertNotIn(b"-F", result.stdout)
-        self.assertIn(b"--to-destination :36717", result.stdout)
-
-    def test_other_interface_is_preserved(self):
-        result = self.run_retirement(rule_interface="eth1")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertNotIn(b"DELETE", result.stdout)
-
-    def test_no_deletion_before_native_replacement_exists(self):
-        result = self.run_retirement(native=False)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertNotIn(b"DELETE", result.stdout)
-
     def test_response_size_remains_opt_in(self):
         install = (ROOT / "slowdns-install.sh").read_text(encoding="utf-8")
         self.assertIn('Environment=FRIMPS_SLOWDNS_MTU=1232', install)

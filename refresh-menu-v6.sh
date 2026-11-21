@@ -21,8 +21,8 @@ install -m 644 "$script_dir/dnstt-source/upstream-20260501.tar.gz" "$runtime_dir
 # Keep the helpers that are direct script copies in sync during a live refresh;
 # otherwise a refreshed menu can still apply obsolete routing or render logic.
 install -d -m 755 "$helper_dir"
-if [[ -f /etc/systemd/system/frimps-firewall-migration.service ]]; then
-  install -m 700 "$script_dir/retire-iptables-rules.sh" "$helper_dir/frimps-retire-iptables-rules"
+if [[ -f /etc/systemd/system/frimps-udp-custom.service || -f /etc/systemd/system/frimps-firewall-migration.service ]]; then
+  bash "$script_dir/install-firewall-guard.sh"
 fi
 if [[ -f /etc/systemd/system/frimps-socksip-network.service ]]; then
   install -m 700 "$script_dir/socksip-network.sh" "$helper_dir/frimps-socksip-network"
@@ -43,6 +43,9 @@ bash "$runtime_dir/apply-service-hardening.sh"
 bash "$runtime_dir/install-maintenance-timer.sh"
 bash "$runtime_dir/install-health-monitor.sh"
 bash "$runtime_dir/enable-frimps-services.sh"
+if [[ -f /etc/systemd/system/frimps-firewall-migration.service ]]; then
+  systemctl restart frimps-firewall-migration.service
+fi
 if [[ -f /etc/systemd/system/frimps-hcr.service ]]; then bash "$script_dir/retire-hcr-trial.sh"; fi
 
 echo 'Frimps menu refreshed and installed services are boot-persistent.'

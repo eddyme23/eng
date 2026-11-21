@@ -56,6 +56,11 @@ check() {
     echo "Recovery not verified: $unit"
   fi
 }
+# Reconcile exact obsolete rules left by a late persistence/third-party restore.
+# Do not restart a working VPN merely because a legacy rule reappeared.
+if [[ -x /usr/local/libexec/frimps-retire-iptables-rules ]]; then
+  /usr/local/libexec/frimps-retire-iptables-rules --if-ready || echo 'ENG UDP firewall reconciliation failed; inspect migration logs.' >&2
+fi
 # Check the protocol's own listener; UDP services are not probed with fake logins.
 while read -r unit transport port; do check "$unit" "$transport" "$port"; done <<'UNITS'
 frimps-v6-dropbear.service t 143

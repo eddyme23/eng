@@ -91,6 +91,7 @@ class AuditCheckTest(unittest.TestCase):
         prefix = r"""
 set -- --local
 systemctl() { return 0; }
+bash() { return 0; }
 test() { return 0; }
 grep() { [[ $* != *1-65535* ]]; }
 timeout() { return 0; }

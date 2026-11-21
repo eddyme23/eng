@@ -26,22 +26,7 @@ systemctl enable --now frimps-socksip.service
 systemctl restart frimps-socksip.service
 bash "$script_dir/refresh-menu-v6.sh"
 if systemctl cat frimps-v6-wireguard-nat.service >/dev/null 2>&1; then systemctl restart frimps-v6-wireguard-nat.service; fi
-bash "$script_dir/retire-iptables-rules.sh"
-install -m 700 "$script_dir/retire-iptables-rules.sh" /usr/local/libexec/frimps-retire-iptables-rules
-cat >/etc/systemd/system/frimps-firewall-migration.service <<'EOF'
-[Unit]
-Description=Retire prior Frimps iptables rules after native nftables setup
-After=netfilter-persistent.service frimps-v6-udp-routing.service frimps-socksip-network.service frimps-v6-wireguard-nat.service frimps-udp-custom.service
-Requires=frimps-v6-udp-routing.service frimps-socksip-network.service
-[Service]
-Type=oneshot
-ExecStart=/usr/local/libexec/frimps-retire-iptables-rules
-RemainAfterExit=yes
-[Install]
-WantedBy=multi-user.target
-EOF
-systemctl daemon-reload
-systemctl enable --now frimps-firewall-migration.service
+bash "$script_dir/apply-legacy-udp-fix.sh"
 systemctl is-active --quiet frimps-v6-udp-routing frimps-socksip-network frimps-socksip
 echo "UDP update applied; backup: $backup"
 echo 'Client tests required: UDP Custom port 53000; SocksIP UDP port 2000, VPS IPv4 and managed SSH credentials.'

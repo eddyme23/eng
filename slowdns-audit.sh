@@ -50,6 +50,10 @@ if command -v nft >/dev/null; then
     failed=1
   fi
 fi
+# iptables-legacy state is invisible to a native nft ruleset listing.
+bash "$script_dir/retire-iptables-rules.sh" --check
+legacy_status=$?
+if ((legacy_status != 0 && legacy_status != 2)); then failed=1; fi
 # A real encrypted stream check; never installs a client or changes services.
 python3 "$script_dir/slowdns-audit-check.py" stream --domain "$ns"
 probe_status=$?
