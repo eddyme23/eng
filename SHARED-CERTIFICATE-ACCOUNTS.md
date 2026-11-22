@@ -30,12 +30,44 @@ bash ./app-ssh-auth.sh shared-import /root/ACCOUNT-public.json
 
 Menu options 08 and 09 perform the same export/import. Import creates an absent
 managed Linux account with a random undisclosed password and applies the scoped
-certificate-only SSH policy. Ordinary existing password accounts and local
-certificate accounts are never overwritten. Choose a new name if one conflicts.
-Repeated imports of the same active identity are safe. If a newly created account
-fails setup, inspect the error; remove that incomplete account through SSH Account
-Management before retrying. Existing account expiry must cover the exported
-certificate expiry; renew the local OS account first if needed.
+certificate-only SSH policy. If A already has the same certificate account username,
+import adds B's and C's public identities alongside A's own identity. It never replaces
+the existing private bundle, local CA, other identities or UDP password. An existing
+ordinary password account is still refused; this command is for certificate accounts.
+Repeated imports of the same active identity are safe. A revoked identity cannot be
+restored by import, and changing an existing identity's public key or CA is refused.
+If a newly created account fails setup, inspect the error; remove that incomplete
+account through SSH Account Management before retrying.
+
+Each import is capped by the receiving Linux account's expiry. It prints the local
+authorization expiry and never extends that OS account. To extend access, renew that
+local OS account and then re-import the public authorization.
+
+### Your A/B/C setup with the same username
+
+Keep `eddy` on all three VPS servers. On B:
+
+```bash
+bash ./app-ssh-auth.sh shared-export eddy > /root/B-eddy-public.json
+```
+
+On C:
+
+```bash
+bash ./app-ssh-auth.sh shared-export eddy > /root/C-eddy-public.json
+```
+
+Copy only these public files to A. On A:
+
+```bash
+bash ./app-ssh-auth.sh shared-import /root/B-eddy-public.json
+bash ./app-ssh-auth.sh shared-import /root/C-eddy-public.json
+bash ./app-ssh-auth.sh bundle-list
+```
+
+A now accepts the three certificate identities under `eddy`. This does not make A
+route SSH sessions to B/C; retain your existing proxy routing. Each identity retains
+its original issuer. Do not paste private Gen bundles into the server import.
 
 The public package contains the username, CA public key, principal identity,
 account public key and authorization expiry. It contains no account private key,
@@ -78,15 +110,23 @@ require a separate app/Gen change. Endpoint and DNS settings remain per server.
 Renew only on the issuer using the normal certificate menu. Export the updated
 private bundle to Gen and re-export/re-import the public authorization on every
 replica to extend its authorization expiry. Renew a replica's local OS account
-first when its expiry is too short (`bash ./ssh-accounts.sh renew ACCOUNT DAYS`).
-Replica renew/export-Gen operations intentionally refuse: no private key or local
-signing identity was copied. Menu list and connection details include replicas.
+when longer access is needed (`bash ./ssh-accounts.sh renew ACCOUNT DAYS`), then re-import.
+A keeps renewing/exporting its own local private bundle. Imported identities are
+renewed on their original issuer. Menu list includes each identity ID and local/shared
+origin. `shared-export ACCOUNT` prefers the local identity; use `--identity ID` to
+export a specific shared identity when several exist.
 
-To revoke, run on EVERY participating VPS, including the issuer:
+To revoke B's shared identity on A without affecting A or C, use menu 10 or:
 
 ```bash
-bash ./app-ssh-auth.sh revoke ACCOUNT certificate-account
+bash ./app-ssh-auth.sh revoke eddy certificate-account --identity B_DEVICE_ID
 ```
+
+Use the identity ID printed by `bundle-list`; it is public. Revoke that identity
+on every VPS that accepts it, including its issuer. Without `--identity`, revoke
+prefers the local certificate when one exists; if there are several shared-only
+identities, it refuses ambiguity. Deleting the Linux account revokes all its
+identities. Revoking a shared identity does not lock the local account's UDP password.
 
 Revocation removes authorization for new logins; existing authenticated sessions
 are not terminated. There is no background synchronization. Revoked identities
@@ -96,8 +136,8 @@ does not change SlowDNS keys, domain, MTU, transport routing or password account
 ## Validation limits
 
 Local regression tests exercise real OpenSSH key/certificate generation, public-only
-export, foreign-CA persistence, expiry limits, idempotence, conflicting/revoked
-identity rejection and rollback of trust/database on policy failure. SSH policy and
+export, foreign-CA persistence, expiry caps, three identities under one username,
+independent renewal/revocation, idempotence, changed-key/revoked identity rejection and rollback of trust/database on policy failure. SSH policy and
 account operations are mocked on Windows. Live Linux SSH certificate login through
 A and directly to B/C, host pin selection, reconnects, expiry/revocation and reboot
 persistence must still be verified on VPS servers before broad rollout.

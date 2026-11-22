@@ -344,8 +344,15 @@ def revoke(args):
     db = read_db()
     previous_db = json.loads(json.dumps(db))
     matches = [d for d in db['devices'] if d['username'] == args.username and d['device'] == args.device]
+    identity = getattr(args, 'identity', None)
+    if identity:
+        matches = [d for d in matches if d['id'] == identity]
+    elif len(matches) > 1:
+        local = [d for d in matches if not d.get('shared')]
+        if len(local) == 1:
+            matches = local
     if len(matches) != 1:
-        raise ValueError('Device not found')
+        raise ValueError('Select one certificate identity with --identity (see bundle-list)')
     record = matches[0]
     # Revocation remains possible even after the account expires.
     import pwd
@@ -357,7 +364,7 @@ def revoke(args):
         user = None
     if user is not None and (user.pw_uid < 1000 or user.pw_uid == 65534):
         raise ValueError('Refusing a root/system account')
-    if user is not None and record['device'] == 'certificate-account':
+    if user is not None and record['device'] == 'certificate-account' and not record.get('shared'):
         disable_udp_password(args.username)
     record['status'] = 'revoked'
     record['revokedAt'] = datetime.now(timezone.utc).isoformat()
@@ -407,7 +414,7 @@ def purge_account(username):
     identifier(username)
     records = [d for d in read_db()['devices'] if d['username'] == username and d['status'] == 'active']
     for record in records:
-        revoke(SimpleNamespace(username=username, device=record['device']))
+        revoke(SimpleNamespace(username=username, device=record['device'], identity=record['id']))
     # Even an empty/stale database must remove any surviving central trust file.
     path = policy_module().KEYS / username
     if path.exists():
@@ -556,13 +563,19 @@ def export_bundle(username, host_pin=None):
     return data
 
 
-def shared_export(username):
+def shared_export(username, identity=None):
     """Public authorization only: never export a Gen bundle to another VPS."""
     account(username)
     records = [d for d in read_db()['devices'] if d['username'] == username and
                d['device'] == 'certificate-account' and d['status'] == 'active']
+    if identity:
+        records = [d for d in records if d['id'] == identity]
+    elif len(records) > 1:
+        local = [d for d in records if not d.get('shared')]
+        if len(local) == 1:
+            records = local
     if len(records) != 1:
-        raise ValueError('Expected one active certificate account')
+        raise ValueError('Select one active certificate with --identity (see bundle-list)')
     record = records[0]
     data = dict(schema=1, type='eng-shared-ssh-authorization', username=username,
                 deviceId=record['id'], publicKey=record['publicKey'],
@@ -602,26 +615,33 @@ def shared_import(data, new_account=False):
     data = validate_shared(data)
     username = data['username']
     user, expiry = account(username)
-    end = datetime.fromisoformat(data['validBefore'])
-    if expiry < end:
-        raise ValueError('Local account expires before the certificate; renew its OS validity first')
+    end = min(datetime.fromisoformat(data['validBefore']), expiry)
     db = read_db()
     previous = json.loads(json.dumps(db))
     records = [d for d in db['devices'] if d['username'] == username]
-    if records:
-        if len(records) != 1 or not records[0].get('shared') or records[0]['id'] != data['deviceId'] or records[0]['status'] != 'active':
-            raise ValueError('Refusing to replace a local, different or revoked certificate identity')
-        if records[0]['caPublicKey'] != data['caPublicKey'] or records[0]['publicKey'] != data['publicKey']:
-            raise ValueError('Shared identity key or CA changed; use a new account')
-    elif not new_account:
-        raise ValueError('Refusing to convert an existing password account; use a new account name')
+    matches = [d for d in records if d['id'] == data['deviceId']]
+    if any(d['id'] == data['deviceId'] and d['username'] != username for d in db['devices']):
+        raise ValueError('Certificate identity already belongs to another username')
+    if matches:
+        if len(matches) != 1 or matches[0]['status'] != 'active':
+            raise ValueError('Refusing to restore a revoked certificate identity')
+        old = matches[0]
+        ca = old.get('caPublicKey') or authority()
+        if ca != data['caPublicKey'] or old['publicKey'] != data['publicKey']:
+            raise ValueError('Certificate identity key or CA changed; use a new identity')
+        if not old.get('shared'):
+            print('This VPS already owns the original certificate:', username)
+            return
+    elif not new_account and not any(d['device'] == 'certificate-account' and
+                                     d['status'] == 'active' for d in records):
+        raise ValueError('Refusing to convert an existing password account; create a certificate account first')
     backend_policy(user, data['publicKey'].split()[0])
     transport_policy()
     record = dict(id=data['deviceId'], username=username, device='certificate-account',
                   principal='eng-app-' + data['deviceId'], status='active', shared=True,
                   publicKey=data['publicKey'], caPublicKey=data['caPublicKey'],
-                  validAfter=datetime.now(timezone.utc).isoformat(), validBefore=data['validBefore'])
-    db['devices'] = [d for d in db['devices'] if d['username'] != username] + [record]
+                  validAfter=datetime.now(timezone.utc).isoformat(), validBefore=end.isoformat())
+    db['devices'] = [d for d in db['devices'] if not (d['username'] == username and d['id'] == record['id'])] + [record]
     with authorized_file(user) as (before, write):
         try:
             write(edit_lines(before, record['id'], entry(record, record['caPublicKey'])))
@@ -632,7 +652,8 @@ def shared_import(data, new_account=False):
             save_db(previous)
             policy_module().sync(manager(), previous, username)
             raise
-    print('Shared certificate authorized:', username)
+    print('Shared certificate authorized:', username, 'identity:', record['id'])
+    print('Local authorization expires:', record['validBefore'])
     print('No private keys, UDP credentials or host keys imported. Revoke on each VPS separately.')
 
 
@@ -645,11 +666,12 @@ def list_certificate_accounts():
         status = record['status']
         if status == 'active' and datetime.fromisoformat(record['validBefore']) <= now:
             status = 'expired'
-        rows.append((record['username'], status, record['validBefore']))
+        rows.append((record['username'], status, record['validBefore'], record.get('id', '-'),
+                     'shared' if record.get('shared') else 'local'))
     if not rows:
         print('No certificate accounts found.')
         return
-    print('ACCOUNT\tSTATUS\tCERTIFICATE EXPIRY (UTC)')
+    print('ACCOUNT\tSTATUS\tCERTIFICATE EXPIRY (UTC)\tIDENTITY\tORIGIN')
     for row in rows:
         print(*row, sep='\t')
 
@@ -671,10 +693,12 @@ def main():
     cancel = commands.add_parser('revoke')
     cancel.add_argument('username')
     cancel.add_argument('device')
+    cancel.add_argument('--identity', help='Revoke only this identity; otherwise prefer the local certificate')
     commands.add_parser('list')
     commands.add_parser('bundle-list')
     shared = commands.add_parser('shared-export')
     shared.add_argument('username')
+    shared.add_argument('--identity', help='Export this identity; otherwise prefer the local certificate')
     shared = commands.add_parser('shared-import')
     shared.add_argument('file', type=Path)
     audit = commands.add_parser('audit')
@@ -746,7 +770,7 @@ def main():
         elif args.action == 'revoke':
             revoke(args)
         elif args.action == 'shared-export':
-            print(json.dumps(shared_export(args.username), indent=2))
+            print(json.dumps(shared_export(args.username, args.identity), indent=2))
         elif args.action == 'shared-import':
             shared_import(args.shared_data, getattr(args, 'shared_new_account', False))
         elif args.action == 'bundle-list':

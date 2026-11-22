@@ -417,8 +417,8 @@ class AppSshAuthTest(unittest.TestCase):
                 self.m.shared_import(data)
             self.m.shared_import(data, new_account=True)
             changed = dict(data, deviceId='b' * 32)
-            with self.assertRaisesRegex(ValueError, 'different'):
-                self.m.shared_import(changed)
+            self.m.shared_import(changed)
+            self.assertEqual(len(self.m.read_db()['devices']), 2)
             db = self.m.read_db();db['devices'][0]['status'] = 'revoked';self.m.save_db(db)
             with self.assertRaisesRegex(ValueError, 'revoked'):
                 self.m.shared_import(data)
@@ -437,8 +437,9 @@ class AppSshAuthTest(unittest.TestCase):
 
     def test_shared_import_is_bounded_by_local_account_expiry(self):
         with self.patches():
-            with self.assertRaisesRegex(ValueError, 'expires before'):
+            with patch.object(self.m, 'policy_module'):
                 self.m.shared_import(dict(self.shared_fixture(), validBefore=(self.expiry + timedelta(days=1)).isoformat()), new_account=True)
+            self.assertEqual(self.m.read_db()['devices'][0]['validBefore'], self.expiry.isoformat())
 
     def test_destination_bundle_export_changes_only_pin_and_not_saved_credential(self):
         with self.patches(), patch.object(self.m, 'policy_module'), patch.object(self.m, 'pin_policy', return_value={'genPolicy': {'SSHHostKeyPin': 'original'}}):
@@ -452,3 +453,65 @@ class AppSshAuthTest(unittest.TestCase):
             self.assertEqual(exported['privateKey'], json.loads(original)['privateKey'])
             with self.assertRaisesRegex(ValueError, 'fingerprint'):
                 self.m.export_bundle('eddy', 'invalid')
+
+    def test_three_ca_identities_coexist_renew_and_revoke_independently(self):
+        with self.patches(), patch.object(self.m, 'policy_module'), patch.object(self.m, 'pin_policy', return_value={'genPolicy': {}}), patch.dict(sys.modules, {'pwd': SimpleNamespace(getpwnam=lambda _: self.user)}):
+            self.m.policy_module().KEYS = self.auth / 'central'
+            args = self.bundle_args()
+            path = self.m.create_bundle(args)
+            original = path.read_bytes()
+            local = json.loads(original)
+            foreign_b = dict(self.shared_fixture(), caPublicKey=self.m.public_key((self.base / 'device.pub').read_text()))
+            ca_c = self.auth / 'foreign-c'
+            subprocess.run([KEYGEN, '-q', '-t', 'ed25519', '-N', '', '-f', str(ca_c)], check=True, capture_output=True)
+            foreign_c = dict(self.shared_fixture(), deviceId='c' * 32, caPublicKey=self.m.public_key(ca_c.with_suffix('.pub').read_text()))
+            self.m.shared_import(foreign_b)
+            self.m.shared_import(foreign_c)
+            self.m.shared_import(foreign_b)
+            self.assertEqual(len(self.m.read_db()['devices']), 3)
+            self.assertEqual(path.read_bytes(), original)
+            for data in (local, foreign_b, foreign_c):
+                self.assertIn(data['caPublicKey'].encode(), self.content)
+                self.assertIn(('eng-app-' + data['deviceId']).encode(), self.content)
+            self.assertEqual(self.m.shared_export('eddy')['deviceId'], local['deviceId'])
+            self.assertEqual(self.m.shared_export('eddy', foreign_b['deviceId'])['caPublicKey'], foreign_b['caPublicKey'])
+            self.m.shared_import(self.m.shared_export('eddy'))
+            self.assertEqual(len(self.m.read_db()['devices']), 3)
+            self.m.renew_bundle(args)
+            self.assertEqual(len(self.m.read_db()['devices']), 3)
+            renewed = path.read_bytes()
+            self.m.revoke(SimpleNamespace(username='eddy', device='certificate-account', identity=foreign_b['deviceId']))
+            self.assertEqual(path.read_bytes(), renewed)
+            self.m.disable_udp_password.assert_not_called()
+            self.assertNotIn(foreign_b['caPublicKey'].encode(), self.content)
+            self.assertIn(foreign_c['caPublicKey'].encode(), self.content)
+            self.assertIn(local['caPublicKey'].encode(), self.content)
+            with self.assertRaisesRegex(ValueError, 'revoked'):
+                self.m.shared_import(foreign_b)
+            self.m.revoke(SimpleNamespace(username='eddy', device='certificate-account'))
+            self.assertFalse(path.exists())
+            self.assertIn(foreign_c['caPublicKey'].encode(), self.content)
+            self.m.disable_udp_password.assert_called_once_with('eddy')
+            self.m.purge_account('eddy')
+            self.assertFalse(any(d['status'] == 'active' for d in self.m.read_db()['devices']))
+
+    def test_shared_import_rejects_identity_key_replacement_without_losing_others(self):
+        with self.patches(), patch.object(self.m, 'policy_module'):
+            data = self.shared_fixture()
+            self.m.shared_import(data, new_account=True)
+            before = self.content
+            with self.assertRaisesRegex(ValueError, 'key or CA changed'):
+                self.m.shared_import(dict(data, caPublicKey=self.m.public_key((self.base / 'device.pub').read_text())))
+            self.assertEqual(self.content, before)
+
+    def test_shared_import_failure_preserves_existing_local_bundle_and_foreign_trust(self):
+        with self.patches(), patch.object(self.m, 'policy_module') as policy, patch.object(self.m, 'pin_policy', return_value={'genPolicy': {}}):
+            path = self.m.create_bundle(self.bundle_args())
+            self.m.shared_import(self.shared_fixture())
+            before, bundle, db = self.content, path.read_bytes(), self.m.read_db()
+            policy.return_value.set_mode.side_effect = ValueError('policy failed')
+            with self.assertRaisesRegex(ValueError, 'policy failed'):
+                self.m.shared_import(dict(self.shared_fixture(), deviceId='c' * 32))
+            self.assertEqual(self.content, before)
+            self.assertEqual(path.read_bytes(), bundle)
+            self.assertEqual(self.m.read_db(), db)

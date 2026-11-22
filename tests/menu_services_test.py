@@ -49,6 +49,7 @@ class MenuServicesTest(unittest.TestCase):
             ('07\ncustomer1\n00\n', 'certificate-details.sh customer1'),
             ('08\ncustomer1\n00\n', 'app-ssh-auth.sh shared-export customer1'),
             ('09\n/root/customer1-public.json\n00\n', 'app-ssh-auth.sh shared-import /root/customer1-public.json'),
+            ('10\ncustomer1\n' + 'a' * 32 + '\n00\n', 'app-ssh-auth.sh revoke customer1 certificate-account --identity ' + 'a' * 32),
         ]
         for data, expected in cases:
             for exit_code in (0, 1):

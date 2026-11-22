@@ -137,3 +137,27 @@ class AppSshPolicyTest(unittest.TestCase):
         self.m.save_db({'version': 1, 'devices': [self.device]})
         self.p.sync(self.m, self.m.read_db(), 'appuser')
         self.assertEqual((self.p.KEYS / 'appuser').read_text(), '')
+
+    def test_three_identities_keep_their_own_ca_and_revoking_one_preserves_two(self):
+        local = dict(self.device)
+        local['caPublicKey'] = (self.m.AUTH / 'ca.pub').read_text()
+        foreign = []
+        for letter in ('b', 'c'):
+            raw = b'\x00\x00\x00\x0bssh-ed25519\x00\x00\x00\x20' + letter.encode() * 32
+            ca = 'ssh-ed25519 ' + base64.b64encode(raw).decode()
+            foreign.append(dict(local, id=letter * 32, principal='eng-app-' + letter * 32, shared=True, caPublicKey=ca))
+        db = {'version': 1, 'devices': [local, *foreign]}
+        self.m.save_db(db)
+        self.p.set_mode(self.m, 'appuser', 'certificates-only')
+        text = (self.p.KEYS / 'appuser').read_text()
+        for record in db['devices']:
+            self.assertIn(record['caPublicKey'], text)
+            self.assertIn(record['principal'], text)
+        self.assertEqual(text.count('cert-authority'), 3)
+        foreign[0]['status'] = 'revoked'
+        self.p.sync(self.m, db, 'appuser')
+        text = (self.p.KEYS / 'appuser').read_text()
+        self.assertNotIn(foreign[0]['principal'], text)
+        self.assertIn(local['principal'], text)
+        self.assertIn(foreign[1]['principal'], text)
+        self.assertEqual(text.count('cert-authority'), 2)
