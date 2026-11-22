@@ -81,7 +81,7 @@ class AppSshAuthTest(unittest.TestCase):
 
     def test_generated_bundle_has_matching_private_key_and_restricted_signed_certificate(self):
         with self.patches(), patch.dict(sys.modules, {'pwd': SimpleNamespace(getpwnam=lambda _: self.user)}), patch.object(self.m, 'policy_module') as policy, patch.object(
-                self.m, 'pin_policy', return_value={'genPolicy': {'SSHAuthMethod': 'device_certificate'}}):
+                self.m, 'pin_policy', return_value={'genPolicy': {'SSHAuthMethod': 'device_certificate', 'SSHHostKeyPin': 'SHA256:' + 'A'*43}}):
             path = self.m.create_bundle(self.bundle_args())
             data = json.loads(path.read_text())
             policy.return_value.set_mode.assert_called_once()
@@ -118,7 +118,7 @@ class AppSshAuthTest(unittest.TestCase):
 
     def test_bundle_renewal_preserves_identity_key_and_rejects_revocation(self):
         with self.patches(), patch.dict(sys.modules, {'pwd': SimpleNamespace(getpwnam=lambda _: self.user)}), patch.object(self.m, 'policy_module'), patch.object(
-                self.m, 'pin_policy', return_value={'genPolicy': {}}):
+                self.m, 'pin_policy', return_value={'genPolicy': {'SSHHostKeyPin': 'SHA256:' + 'A'*43}}):
             args = self.bundle_args()
             args.days = 1
             path = self.m.create_bundle(args)
@@ -136,7 +136,7 @@ class AppSshAuthTest(unittest.TestCase):
 
     def test_bundle_policy_failure_leaves_no_usable_credential(self):
         with self.patches(), patch.dict(sys.modules, {'pwd': SimpleNamespace(getpwnam=lambda _: self.user)}), patch.object(self.m, 'policy_module') as policy, patch.object(
-                self.m, 'pin_policy', return_value={'genPolicy': {}}):
+                self.m, 'pin_policy', return_value={'genPolicy': {'SSHHostKeyPin': 'SHA256:' + 'A'*43}}):
             policy.return_value.set_mode.side_effect = ValueError('sshd validation failed')
             with self.assertRaisesRegex(ValueError, 'sshd validation'):
                 self.m.create_bundle(self.bundle_args())
@@ -146,7 +146,7 @@ class AppSshAuthTest(unittest.TestCase):
 
     def test_bundle_renewal_write_failure_restores_trust_and_old_export(self):
         with self.patches(), patch.object(self.m, 'policy_module'), patch.object(
-                self.m, 'pin_policy', return_value={'genPolicy': {}}):
+                self.m, 'pin_policy', return_value={'genPolicy': {'SSHHostKeyPin': 'SHA256:' + 'A'*43}}):
             args = self.bundle_args()
             args.days = 1
             path = self.m.create_bundle(args)
@@ -199,7 +199,7 @@ class AppSshAuthTest(unittest.TestCase):
         args.bundle_data = dict(privateKey=(self.base / 'device-ecdsa').read_text(),
                                 publicKey=(self.base / 'device-ecdsa.pub').read_text())
         with self.patches(), patch.object(self.m, 'policy_module'), patch.object(
-                self.m, 'pin_policy', return_value={'genPolicy': {}}):
+                self.m, 'pin_policy', return_value={'genPolicy': {'SSHHostKeyPin': 'SHA256:' + 'A'*43}}):
             path = self.m.create_bundle(args)
             data = json.loads(path.read_text())
             self.assertEqual(data['publicKey'], self.m.public_key(args.bundle_data['publicKey']))
@@ -211,7 +211,7 @@ class AppSshAuthTest(unittest.TestCase):
         args = self.bundle_args()
         args.bundle_data = dict(privateKey='fixture', publicKey=(self.base / 'device-ecdsa.pub').read_text())
         with self.patches(), patch.object(self.m, 'policy_module'), patch.object(
-                self.m, 'pin_policy', return_value={'genPolicy': {}}), patch.object(
+                self.m, 'pin_policy', return_value={'genPolicy': {'SSHHostKeyPin': 'SHA256:' + 'A'*43}}), patch.object(
                 self.m, 'run', return_value=SimpleNamespace(stdout=(self.base / 'device.pub').read_text())):
             with self.assertRaisesRegex(ValueError, 'do not match'):
                 self.m.create_bundle(args)
@@ -380,7 +380,7 @@ class AppSshAuthTest(unittest.TestCase):
                     caPublicKey=self.public, validBefore=(self.expiry - timedelta(hours=1)).isoformat())
 
     def test_shared_export_contains_no_private_or_udp_credentials(self):
-        with self.patches(), patch.object(self.m, 'policy_module'), patch.object(self.m, 'pin_policy', return_value={'genPolicy': {}}):
+        with self.patches(), patch.object(self.m, 'policy_module'), patch.object(self.m, 'pin_policy', return_value={'genPolicy': {'SSHHostKeyPin': 'SHA256:' + 'A'*43}}):
             original = json.loads(self.m.create_bundle(self.bundle_args()).read_text())
             shared = self.m.shared_export('eddy')
             self.assertEqual(shared['deviceId'], original['deviceId'])
@@ -441,21 +441,19 @@ class AppSshAuthTest(unittest.TestCase):
                 self.m.shared_import(dict(self.shared_fixture(), validBefore=(self.expiry + timedelta(days=1)).isoformat()), new_account=True)
             self.assertEqual(self.m.read_db()['devices'][0]['validBefore'], self.expiry.isoformat())
 
-    def test_destination_bundle_export_changes_only_pin_and_not_saved_credential(self):
-        with self.patches(), patch.object(self.m, 'policy_module'), patch.object(self.m, 'pin_policy', return_value={'genPolicy': {'SSHHostKeyPin': 'original'}}):
+    def test_fresh_bundle_and_default_export_use_new_format_without_proxy(self):
+        direct = 'SHA256:' + 'A'*43
+        with self.patches(), patch.object(self.m, 'policy_module'), patch.object(self.m, 'pin_policy', return_value={'genPolicy': {'SSHHostKeyPin': direct}}):
             path = self.m.create_bundle(self.bundle_args())
             original = path.read_bytes()
-            pin = 'SHA256:' + 'A' * 43
-            exported = self.m.export_bundle('eddy', pin)
-            self.assertEqual(exported['genPolicy']['SSHHostKeyPin'], pin)
+            exported = self.m.export_bundle('eddy')
+            self.assertEqual(exported['schema'], 2)
+            self.assertEqual(exported['genPolicy']['SSHHostKeyPins'], [direct])
+            self.assertEqual(json.loads(original)['schema'], 2)
             self.assertEqual(path.read_bytes(), original)
-            self.assertEqual(exported['certificate'], json.loads(original)['certificate'])
-            self.assertEqual(exported['privateKey'], json.loads(original)['privateKey'])
-            with self.assertRaisesRegex(ValueError, 'fingerprint'):
-                self.m.export_bundle('eddy', 'invalid')
 
     def test_three_ca_identities_coexist_renew_and_revoke_independently(self):
-        with self.patches(), patch.object(self.m, 'policy_module'), patch.object(self.m, 'pin_policy', return_value={'genPolicy': {}}), patch.dict(sys.modules, {'pwd': SimpleNamespace(getpwnam=lambda _: self.user)}):
+        with self.patches(), patch.object(self.m, 'policy_module'), patch.object(self.m, 'pin_policy', return_value={'genPolicy': {'SSHHostKeyPin': 'SHA256:' + 'A'*43}}), patch.dict(sys.modules, {'pwd': SimpleNamespace(getpwnam=lambda _: self.user)}):
             self.m.policy_module().KEYS = self.auth / 'central'
             args = self.bundle_args()
             path = self.m.create_bundle(args)
@@ -505,7 +503,7 @@ class AppSshAuthTest(unittest.TestCase):
             self.assertEqual(self.content, before)
 
     def test_shared_import_failure_preserves_existing_local_bundle_and_foreign_trust(self):
-        with self.patches(), patch.object(self.m, 'policy_module') as policy, patch.object(self.m, 'pin_policy', return_value={'genPolicy': {}}):
+        with self.patches(), patch.object(self.m, 'policy_module') as policy, patch.object(self.m, 'pin_policy', return_value={'genPolicy': {'SSHHostKeyPin': 'SHA256:' + 'A'*43}}):
             path = self.m.create_bundle(self.bundle_args())
             self.m.shared_import(self.shared_fixture())
             before, bundle, db = self.content, path.read_bytes(), self.m.read_db()
@@ -539,7 +537,7 @@ class AppSshAuthTest(unittest.TestCase):
         self.assertEqual(self.content, self.before)
 
     def test_certificate_choices_filter_modes_and_keep_same_username_identities(self):
-        with self.patches(), patch.object(self.m, 'policy_module'), patch.object(self.m, 'pin_policy', return_value={'genPolicy': {}}):
+        with self.patches(), patch.object(self.m, 'policy_module'), patch.object(self.m, 'pin_policy', return_value={'genPolicy': {'SSHHostKeyPin': 'SHA256:' + 'A'*43}}):
             self.m.STATE = self.auth
             (self.auth / 'ssh-users.json').write_text('[{"name":"eddy","expiresAt":"2030-01-01"}]')
             self.m.create_bundle(self.bundle_args())
@@ -598,25 +596,20 @@ class AppSshAuthTest(unittest.TestCase):
             self.assertNotIn('privateKey', data)
             self.assertNotIn('PRIVATE KEY', json.dumps(data))
 
-    def test_saved_proxy_exports_change_only_pin_and_leave_direct_bundle_unchanged(self):
-        with self.patches(), patch.object(self.m, 'policy_module'), patch.object(self.m, 'pin_policy', return_value={'genPolicy': {'SSHHostKeyPin': 'original-direct-pin'}}):
+    def test_default_export_adds_saved_proxy_and_clear_removes_only_its_approval(self):
+        direct = 'SHA256:' + 'A'*43
+        with self.patches(), patch.object(self.m, 'policy_module'), patch.object(self.m, 'pin_policy', return_value={'genPolicy': {'SSHHostKeyPin': direct}}):
             path = self.m.create_bundle(self.bundle_args())
             before = path.read_bytes()
-            proxy = self.proxy_fixture()
-            self.m.save_proxy(proxy)
-            exported = self.m.export_bundle('eddy', use_proxy=True)
-            self.assertEqual(exported['genPolicy']['SSHHostKeyPin'], proxy['sshHostKeyPin'])
-            self.assertEqual(self.m.export_bundle('eddy')['genPolicy']['SSHHostKeyPin'], 'original-direct-pin')
+            proxy = self.proxy_fixture();self.m.save_proxy(proxy)
+            exported = self.m.export_bundle('eddy')
+            self.assertEqual(exported['genPolicy']['SSHHostKeyPin'], direct)
+            self.assertEqual(exported['genPolicy']['SSHHostKeyPins'], [direct, proxy['sshHostKeyPin']])
             self.assertEqual(path.read_bytes(), before)
             for field in ('certificate','privateKey','deviceId','username','caPublicKey','udpCustom'):
                 self.assertEqual(exported[field], json.loads(before)[field])
-            self.assertEqual(self.m.saved_proxy(), proxy)
-            with self.assertRaisesRegex(ValueError, 'not both'):
-                self.m.export_bundle('eddy', 'SHA256:' + 'A'*43, use_proxy=True)
             self.m.proxy_path().unlink()
-            self.assertIsNone(self.m.saved_proxy())
-            with self.assertRaisesRegex(ValueError, 'No saved proxy'):
-                self.m.export_bundle('eddy', use_proxy=True)
+            self.assertEqual(self.m.export_bundle('eddy')['genPolicy']['SSHHostKeyPins'], [direct])
 
     def test_proxy_paste_is_validated_and_cannot_overwrite_with_account_bundle(self):
         from io import StringIO
@@ -633,7 +626,7 @@ class AppSshAuthTest(unittest.TestCase):
             self.assertEqual(self.m.proxy_path().read_bytes(), before)
 
     def test_deleted_revoked_username_can_receive_fresh_bundle_without_reactivating_old_identity(self):
-        with self.patches(), patch.object(self.m, 'policy_module'), patch.object(self.m, 'pin_policy', return_value={'genPolicy': {}}), patch.dict(sys.modules, {'pwd': SimpleNamespace(getpwnam=lambda _: self.user)}):
+        with self.patches(), patch.object(self.m, 'policy_module'), patch.object(self.m, 'pin_policy', return_value={'genPolicy': {'SSHHostKeyPin': 'SHA256:' + 'A'*43}}), patch.dict(sys.modules, {'pwd': SimpleNamespace(getpwnam=lambda _: self.user)}):
             args = self.bundle_args()
             original = json.loads(self.m.create_bundle(args).read_text())
             old_public_authorization = self.m.shared_export('eddy')
@@ -657,24 +650,41 @@ class AppSshAuthTest(unittest.TestCase):
             third = json.loads(self.m.create_bundle(args).read_text())
             self.assertNotIn(third['deviceId'], [original['deviceId'], replacement['deviceId']])
 
-    def test_combined_export_approves_direct_and_proxy_without_changing_account(self):
-        direct = self.m.fingerprint(self.m.public_key((self.base / 'device.pub').read_text()))
+    def test_existing_legacy_bundle_upgrades_on_export_without_replacing_credentials(self):
+        direct = 'SHA256:' + 'A'*43
         with self.patches(), patch.object(self.m, 'policy_module'), patch.object(self.m, 'pin_policy', return_value={'genPolicy': {'SSHHostKeyPin': direct}}):
             path = self.m.create_bundle(self.bundle_args())
+            old = json.loads(path.read_text());old['schema'] = 1;old['genPolicy'].pop('SSHHostKeyPins')
+            self.m.atomic(path, json.dumps(old).encode())
             before = path.read_bytes()
-            with self.assertRaisesRegex(ValueError, 'No saved proxy'):
-                self.m.export_bundle('eddy', combined=True)
-            proxy = self.proxy_fixture();self.m.save_proxy(proxy)
-            combined = self.m.export_bundle('eddy', combined=True)
-            self.assertEqual(combined['schema'], 2)
-            self.assertEqual(combined['genPolicy']['SSHHostKeyPin'], direct)
-            self.assertEqual(combined['genPolicy']['SSHHostKeyPins'], [direct, proxy['sshHostKeyPin']])
+            self.m.save_proxy(self.proxy_fixture())
+            upgraded = self.m.export_bundle('eddy')
+            self.assertEqual(upgraded['schema'], 2)
+            self.assertEqual(upgraded['genPolicy']['SSHHostKeyPins'], [direct, self.proxy_fixture()['sshHostKeyPin']])
             self.assertEqual(path.read_bytes(), before)
-            for field in ('privateKey','certificate','username','deviceId','caPublicKey'):
-                self.assertEqual(combined[field], json.loads(before)[field])
-            for options in ({}, {'use_proxy':True}):
-                legacy = self.m.export_bundle('eddy', **options)
-                self.assertEqual(legacy['schema'], 1)
-                self.assertNotIn('SSHHostKeyPins', legacy['genPolicy'])
-            with self.assertRaisesRegex(ValueError, 'not more than one'):
-                self.m.export_bundle('eddy', use_proxy=True, combined=True)
+            for field in ('privateKey','certificate','username','deviceId','caPublicKey','udpCustom'):
+                self.assertEqual(upgraded[field], old[field])
+            self.m.renew_bundle(self.bundle_args())
+            renewed = json.loads(path.read_text())
+            self.assertEqual(renewed['schema'], 2)
+            self.assertEqual(renewed['privateKey'], old['privateKey'])
+            self.assertEqual(renewed['deviceId'], old['deviceId'])
+
+    def test_fresh_account_with_proxy_saved_uses_current_automatic_export(self):
+        direct = 'SHA256:' + 'A'*43
+        with self.patches(), patch.object(self.m, 'policy_module'), patch.object(self.m, 'pin_policy', return_value={'genPolicy': {'SSHHostKeyPin': direct}}):
+            self.m.save_proxy(self.proxy_fixture())
+            path = self.m.create_bundle(self.bundle_args())
+            stored = json.loads(path.read_text())
+            self.assertEqual(stored['schema'], 2)
+            self.assertEqual(stored['genPolicy']['SSHHostKeyPins'], [direct])
+            exported = self.m.export_bundle('eddy')
+            self.assertEqual(exported['genPolicy']['SSHHostKeyPins'], [direct, self.proxy_fixture()['sshHostKeyPin']])
+            self.assertEqual(exported['certificate'], stored['certificate'])
+            self.assertEqual(exported['privateKey'], stored['privateKey'])
+
+    def test_retired_export_mode_flags_are_rejected(self):
+        for flag in ('--proxy', '--combined', '--host-pin'):
+            result = subprocess.run([sys.executable, ROOT / 'app-ssh-auth.py', 'bundle-export', 'fixture', flag], capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('unrecognized arguments', result.stderr)

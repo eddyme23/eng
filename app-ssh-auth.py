@@ -528,6 +528,7 @@ def create_bundle(args):
             policy_module().set_mode(manager(), args.username, 'certificates-only')
             result.update(type='eng-ssh-account-bundle', privateKeyIncluded=True,
                           privateKey=key.read_text(), genPolicy=pins['genPolicy'])
+            format_account_bundle(result, include_proxy=False)
             result['udpCustom'] = configure_udp_password(args.username)
             atomic(bundle_path(args.username), (json.dumps(result, indent=2) + '\n').encode())
         except BaseException:
@@ -549,6 +550,7 @@ def renew_bundle(args):
     db['devices'] = [record if d['id'] == old['id'] else d for d in db['devices']]
     data.update(package(record, authority()))
     data.update(type='eng-ssh-account-bundle', privateKeyIncluded=True)
+    format_account_bundle(data, include_proxy=False)
     with authorized_file(user) as (before, write):
         try:
             write(edit_lines(before, record['id'], entry(record, authority())))
@@ -565,37 +567,25 @@ def renew_bundle(args):
     return bundle_path(args.username)
 
 
-def export_bundle(username, host_pin=None, use_proxy=False, combined=False):
+def format_account_bundle(data, include_proxy=True):
+    direct = data['genPolicy']['SSHHostKeyPin']
+    if not isinstance(direct, str) or not re.fullmatch(r'SHA256:[A-Za-z0-9+/]{43}', direct):
+        raise ValueError('Invalid direct SSH host fingerprint')
+    pins = [direct]
+    proxy = saved_proxy() if include_proxy else None
+    if proxy is not None:
+        pins.append(proxy['sshHostKeyPin'])
+    data['schema'] = 2
+    data['genPolicy']['SSHHostKeyPins'] = list(dict.fromkeys(pins))
+    return data
+
+
+def export_bundle(username):
     account(username)
     data, _ = read_bundle(username)
     if datetime.fromisoformat(data['validBefore']) <= datetime.now(timezone.utc):
         raise ValueError('Certificate expired; renew first')
-    if combined:
-        if host_pin or use_proxy:
-            raise ValueError('Choose combined, saved proxy, or manual host pin, not more than one')
-        proxy = saved_proxy()
-        if proxy is None:
-            raise ValueError('No saved proxy. Paste its public details in certificate menu option 13 first.')
-        direct = data['genPolicy']['SSHHostKeyPin']
-        if not re.fullmatch(r'SHA256:[A-Za-z0-9+/]{43}', direct):
-            raise ValueError('Invalid direct SSH host fingerprint')
-        data['schema'] = 2
-        data['genPolicy']['SSHHostKeyPins'] = list(dict.fromkeys([direct, proxy['sshHostKeyPin']]))
-        return data
-    data['schema'] = 1
-    data['genPolicy'].pop('SSHHostKeyPins', None)
-    if use_proxy:
-        if host_pin:
-            raise ValueError('Choose saved proxy or manual host pin, not both')
-        proxy = saved_proxy()
-        if proxy is None:
-            raise ValueError('No saved proxy. Paste its public details in certificate menu option 13 first.')
-        host_pin = proxy['sshHostKeyPin']
-    if host_pin:
-        if not re.fullmatch(r'SHA256:[A-Za-z0-9+/]{43}', host_pin):
-            raise ValueError('Expected a verified SHA256 OpenSSH host fingerprint')
-        data['genPolicy']['SSHHostKeyPin'] = host_pin
-    return data
+    return format_account_bundle(data)
 
 
 def shared_export(username, identity=None):
@@ -721,7 +711,7 @@ def save_proxy(data):
     data = validate_proxy(data)
     atomic(proxy_path(), (json.dumps(data, indent=2) + '\n').encode())
     print('Saved certificate-export proxy:', data['ipv4'], data['sshHostKeyPin'])
-    print('Choose Direct or Saved proxy when exporting for Gen. Account authorization on the proxy is still required.')
+    print('Gen exports now automatically approve this VPS and the saved proxy. Account authorization on the proxy is still required.')
 
 
 def shared_import(data, new_account=False):
@@ -825,9 +815,6 @@ def main():
     for action in ('bundle-create', 'bundle-import', 'bundle-renew', 'bundle-export', 'bundle-check'):
         bundle = commands.add_parser(action)
         bundle.add_argument('username')
-        bundle.add_argument('--combined', action='store_true', help='Approve direct and saved proxy pins; updated app/Gen required')
-        bundle.add_argument('--proxy', action='store_true', help='Use saved proxy host pin; export only')
-        bundle.add_argument('--host-pin', help='Verified destination host fingerprint; export only')
         bundle.add_argument('--days', type=int, default=30)
         bundle.add_argument('--host-key', type=Path, default=Path('/etc/ssh/ssh_host_ed25519_key.pub'))
     approve = commands.add_parser('enroll')
@@ -875,8 +862,6 @@ def main():
     args = parser.parse_args()
     if sys.platform != 'linux' or os.geteuid() != 0:
         parser.error('Run as root on the Linux VPS')
-    if (getattr(args, 'host_pin', None) or getattr(args, 'proxy', False) or getattr(args, 'combined', False)) and args.action != 'bundle-export':
-        parser.error('--host-pin, --proxy and --combined are only available for bundle-export')
     if args.action == 'bundle-import':
         print('Paste ENG JSON, then END on its own line. A new local certificate will be issued.', file=sys.stderr)
         args.bundle_data = read_pasted_bundle(sys.stdin)
@@ -922,7 +907,7 @@ def main():
         elif args.action == 'bundle-check':
             read_bundle(args.username)
         elif args.action == 'bundle-export':
-            print(json.dumps(export_bundle(args.username, args.host_pin, args.proxy, args.combined), indent=2))
+            print(json.dumps(export_bundle(args.username), indent=2))
         elif args.action == 'enroll':
             print(json.dumps(enroll(args), indent=2))
         elif args.action == 'revoke':

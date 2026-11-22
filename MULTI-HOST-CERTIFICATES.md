@@ -5,14 +5,14 @@ Each destination keeps its own account. For example, B has `muslim`, C has
 accounts. Neither the username nor private SSH host keys need to be shared across
 all servers. A still needs a local Linux identity for every account it authenticates.
 
-## Export one combined bundle
+## Export one current-format bundle
 
 1. Update ENG on A and the destinations with git pull and refresh-menu-v6.sh.
 2. On A, App Certificate Accounts **12**: copy the public proxy JSON.
 3. On B/C, **13**: paste A's details once.
 4. Create or keep the account on its original destination VPS.
 5. Use **08** on that VPS and **09** on A to authorize that account on A.
-6. Use **05** on the destination, select its account, then target **03 Direct + saved proxy**.
+6. Use **05** on the destination and select its account. Both host approvals are included automatically.
 7. Paste that one private JSON bundle into the updated matching Gen, export its
    protected configuration, and use the updated app.
 
@@ -24,11 +24,14 @@ connect to both servers at once or make A route traffic through B/C automaticall
 cd /root/eng
 git pull --ff-only origin main
 bash ./refresh-menu-v6.sh
-# Equivalent to export target 03, after saving the proxy:
-bash ./app-ssh-auth.sh bundle-export ACCOUNT --combined
+# Standard export automatically includes a saved proxy:
+bash ./app-ssh-auth.sh bundle-export ACCOUNT
 ```
 
-Targets **01 Direct** and **02 Saved proxy** remain single-pin schema-1 exports.
+Fresh creation, renewal and standard export now use schema 2. The previous target
+selector and export-mode flags have been removed. With no proxy saved, schema 2
+contains one approved local host. Older stored bundles can still be read and are
+upgraded on export without changing the account key, certificate or identity.
 
 ## Contract shared by ENG, Gen and the apps
 
@@ -52,8 +55,8 @@ preference keys. Password authentication and network routing are unchanged. UDP
 Custom retains its existing generated-password behavior; the approved SSH host list
 does not change its protocol authentication.
 
-Older clients reject schema 2 rather than silently discarding its extra approvals.
-Do not use the combined export until the app and Gen are updated. This is an SSH
+Use the updated app and Gen for all new exports. Older clients reject schema 2
+rather than silently discarding its extra approvals. This is an SSH
 user certificate feature, not TLS client-certificate/mTLS authentication.
 
 ## Renewal and revocation
@@ -78,7 +81,7 @@ servers with different host keys and the actual ENG signer fixture. It verifies:
 - invalid/oversized/duplicate/missing-primary lists are rejected;
 - the approved set is immutable and survives protected Gen export/import.
 
-Eight classpath runs passed 33 assertions each, with both app-first and Gen-first
+Eight classpath runs passed 35 assertions each, with both app-first and Gen-first
 parsers. Android logging, monotonic-clock and Base64 adapters are replaced in that
 JDK harness; the SSH transport, signing, certificate parser and host verifier are
 production code. Source copies remain identical across all eight parsers.

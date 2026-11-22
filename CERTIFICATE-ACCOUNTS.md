@@ -141,13 +141,14 @@ an extra pause. Empty lists and loading errors remain visible until Enter is pre
 Renewal lists only locally issued private bundles; shared authorizations are renewed
 on their original issuing VPS and then re-imported.
 
-## Saved proxy exports
+## Automatic proxy approvals
 
 Option 12 shows this VPS's public proxy IP/key/fingerprint JSON without needing
-an account. Option 13 pastes and saves it on another VPS. Option 05 then offers
-Direct or Saved proxy; only the exported copy's SSHHostKeyPin changes. Public
-account authorization (08/09) is still required on the proxy. See
-[Shared certificate accounts](SHARED-CERTIFICATE-ACCOUNTS.md) for the A/B/C steps.
+an account. Option 13 pastes and saves it on another VPS. Option 05 always exports
+the new schema-2 bundle, approving the local host and the saved proxy automatically.
+No target selection or manual host-pin flags remain. Public account authorization
+(08/09) is still required on the proxy. The updated apps/Gens support this format.
+See [Shared certificate accounts](SHARED-CERTIFICATE-ACCOUNTS.md).
 
 After deleting a certificate account, its username can be used again for a new
 certificate account. ENG retains the old revoked identity as history and issues a
@@ -156,6 +157,5 @@ bundle and re-share its public authorization where needed. If an earlier failed
 creation left an incomplete Linux account, remove it with certificate menu 11,
 then create again. Do not remove revoked database records manually.
 
-For one bundle usable directly and through the saved proxy, choose export target
-03. This schema-2 format requires the updated app and Gen; see
-[Combined host pins](MULTI-HOST-CERTIFICATES.md).
+Fresh installs and renewals issue schema-2 private bundles. Standard export also
+upgrades older stored bundles without changing their credentials.

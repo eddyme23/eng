@@ -81,25 +81,6 @@ pick_certificate() {
   pick_account_rows "$rows" Certificate
 }
 
-choose_certificate_export_target() {
-  local proxy target
-  export_flags=()
-  proxy="$(bash "$script_dir/app-ssh-auth.sh" proxy-status)" || return 1
-  [[ $proxy != null ]] || return 0
-  menu_title 'CERTIFICATE EXPORT TARGET'
-  item 1 'Direct: this VPS'
-  item 2 "Saved proxy: $(jq -r .ipv4 <<<"$proxy")"
-  item 3 'Direct + saved proxy (requires updated app and Gen)'
-  back_item
-  read_menu_option target '  ► Export target: ' || return 1
-  case "$target" in
-    1) return 0 ;;
-    2) export_flags=(--proxy); return 0 ;;
-    3) export_flags=(--combined); return 0 ;;
-    0) return 1 ;;
-    *) echo 'Invalid selection. Returning to account menu.'; return 1 ;;
-  esac
-}
 
 show_ports() {
   local server_ip os_name arch cores now ram cpu buffer idle idle2 total total2 work
@@ -286,7 +267,7 @@ app_cert_menu() {
       2) if pick_certificate renew; then read -r -p 'Validity (days): ' validity; bash "$script_dir/certificate-accounts.sh" renew "$account" "$validity"; pause; fi ;;
       3) if pick_certificate revoke; then bash "$script_dir/app-ssh-auth.sh" revoke "$account" certificate-account --identity "$identity"; pause; fi ;;
       4) bash "$script_dir/app-ssh-auth.sh" bundle-list; pause ;;
-      5) if pick_certificate gen && choose_certificate_export_target; then bash "$script_dir/app-ssh-auth.sh" bundle-export "$account" "${export_flags[@]}"; pause; fi ;;
+      5) if pick_certificate gen; then bash "$script_dir/app-ssh-auth.sh" bundle-export "$account"; pause; fi ;;
       6) ask_account; bash "$script_dir/certificate-accounts.sh" import "$account" "$validity"; pause ;;
       7) if pick_certificate details; then if [[ $selected_local == true ]]; then bash "$script_dir/certificate-details.sh" "$account"; else bash "$script_dir/certificate-details.sh" "$account" "$identity"; fi; pause; fi ;;
       8) if pick_certificate share; then bash "$script_dir/app-ssh-auth.sh" shared-export "$account" --identity "$identity"; pause; fi ;;

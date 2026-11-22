@@ -65,7 +65,6 @@ class MenuServicesTest(unittest.TestCase):
                             + '\nscript_dir=/fixture; clear() { :; }; pause() { :; }; '
                             + 'pick_certificate() { read -r selection; account=customer1; identity=' + 'a' * 32 + '; selected_local=true; }; '
                             + 'pick_ssh_account() { read -r selection; account=customer1; }; '
-                            + 'choose_certificate_export_target() { export_flags=(); }; '
                             + 'bash() { printf "CALL %s\\n" "$*"; return ' + str(exit_code) + '; }; '
                             + 'app_cert_menu; echo RETURNED')
                     result = self.run_shell(code, data)
@@ -107,22 +106,6 @@ class MenuServicesTest(unittest.TestCase):
                 self.assertIn('RETURNED', result.stdout)
                 self.assertNotIn('MUTATION', result.stdout)
                 self.assertNotIn('PAUSED', result.stdout)
-
-    @unittest.skipUnless(JQ, 'jq required')
-    def test_saved_proxy_target_selector_preserves_direct_and_back(self):
-        proxy = json.dumps(dict(ipv4='8.8.8.8'))
-        jq_function = 'jq() { ' + shlex.quote(Path(JQ).as_posix()) + ' "$@" | tr -d \'\\r\'; };\n'
-        prefix = ('set -u\nRED= GREEN= YELLOW= BLUE= CYAN= WHITE= BOLD= NC=\n' + self.menu_functions() + '\n' + jq_function + 'script_dir=/fixture; ')
-        body = 'if choose_certificate_export_target; then printf "TARGET:%s" "${export_flags[*]}"; else echo CANCELLED; fi'
-        code = prefix + 'bash() { printf "%s" ' + shlex.quote(proxy) + '; }; ' + body
-        for choice, expected in [('01\n','TARGET:'), ('02\n','TARGET:--proxy'), ('03\n','TARGET:--combined'), ('00\n','CANCELLED'), ('99\n','CANCELLED'), ('','CANCELLED')]:
-            result = self.run_shell(code, choice)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn(expected, result.stdout)
-        direct = self.run_shell(prefix + 'bash() { echo null; }; ' + body)
-        self.assertEqual(direct.stdout, 'TARGET:')
-        failed = self.run_shell(prefix + 'bash() { return 1; }; ' + body)
-        self.assertIn('CANCELLED', failed.stdout)
 
     @unittest.skipUnless(JQ, 'jq required')
     def test_empty_or_failed_renewal_list_keeps_explanation_visible(self):
