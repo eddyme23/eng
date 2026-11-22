@@ -668,7 +668,7 @@ def read_shared_authorization(file=None, stream=None):
 def validate_proxy(data):
     fields = {'schema', 'type', 'ipv4', 'hostPublicKey', 'sshHostKeyPin'}
     if not isinstance(data, dict) or set(data) != fields or data['schema'] != 1 or data['type'] != 'eng-ssh-proxy-details':
-        raise ValueError('Paste public proxy details from option 12, not an account bundle')
+        raise ValueError('Paste public proxy details from Show this VPS proxy details, not an account bundle')
     if any(not isinstance(data[key], str) for key in fields - {'schema'}):
         raise ValueError('Invalid proxy field types')
     address = ipaddress.IPv4Address(data['ipv4'])
@@ -870,7 +870,7 @@ def main():
         if args.paste == (args.file is not None):
             parser.error('Use shared-import FILE or shared-import --paste')
         if args.paste:
-            print('Paste PUBLIC JSON from option 08. Import starts automatically after the complete JSON; press Enter once if needed. No END required. No private Gen bundle.', file=sys.stderr)
+            print('Paste PUBLIC JSON from VPS sharing / Proxy settings > Export public account authorization. Import starts automatically after the complete JSON; press Enter once if needed. No END required. No private Gen bundle.', file=sys.stderr)
         args.shared_data = read_shared_authorization(args.file, sys.stdin if args.paste else None)
         name = args.shared_data['username']
         try:
@@ -880,7 +880,7 @@ def main():
             run('bash', Path(__file__).with_name('ssh-accounts.sh'), 'create-certificate', name, str(days))
             args.shared_new_account = True
     if args.action == 'proxy-save':
-        print('Paste PUBLIC proxy JSON from option 12 on your trusted proxy VPS. Completes automatically; no END required.', file=sys.stderr)
+        print('Paste PUBLIC proxy JSON from Show this VPS proxy details on your trusted proxy VPS. Completes automatically; no END required.', file=sys.stderr)
         args.proxy_data = validate_proxy(read_public_json(sys.stdin))
     import fcntl
     os.umask(0o077)

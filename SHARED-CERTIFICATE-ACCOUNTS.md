@@ -16,8 +16,8 @@ Fresh installation uses these same current scripts. No special enable flag is ne
 
 ## Set up proxy A once
 
-1. On A, certificate menu **12**: copy the public proxy JSON. No account is required.
-2. On each destination VPS, **13**: paste A's JSON. Import completes automatically.
+1. On A, certificate menu **06 -> 04**: copy the public proxy JSON. No account is required.
+2. On each destination VPS, **06 -> 05**: paste A's JSON. Import completes automatically.
 
 A's SSH host key is read locally and checked against installed SSH configurations;
 it is not learned by an unverified SSH network lookup. The IP is detected using
@@ -33,9 +33,9 @@ fingerprint must match. Saving them changes no password accounts or SSH config.
 ## Share an account and export to Gen
 
 1. Create or keep the certificate account on B/C using its own username.
-2. Use **08** there to export its PUBLIC account authorization.
-3. Use **09** on A and paste that authorization (no END needed).
-4. Use **05** on B/C, select the account, then copy the PRIVATE JSON into the updated Gen.
+2. Use **06 -> 01** there to export its PUBLIC account authorization.
+3. Use **06 -> 02** on A and paste that authorization (no END needed).
+4. Use **05 -> 02** on B/C, select the account, then copy the PRIVATE JSON into the updated Gen.
 
 There is now just one export format. It always approves the local VPS's host key,
 and automatically adds saved A's key if configured. With no saved proxy, it approves
@@ -69,8 +69,8 @@ To extend a replica's Linux account validity before re-importing:
 bash ./ssh-accounts.sh renew-certificate ACCOUNT DAYS
 ```
 
-Use menu **10** to remove one shared identity, preserving the other identities under
-that username. Menu **11** explicitly deletes the Linux account and all identities
+Use **06 -> 03** to remove one shared identity, preserving the other identities under
+that username. Menu **03** explicitly deletes the Linux account and all identities
 on that VPS. Revocations must be applied on each server accepting the identity;
 existing authenticated sessions are not terminated by credential revocation alone.
 

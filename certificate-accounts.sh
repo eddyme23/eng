@@ -10,7 +10,7 @@ case "$action" in
     bash "$script_dir/ssh-accounts.sh" create-certificate "$account" "$days"
     command=bundle-create; [[ $action != import ]] || command=bundle-import
     if ! bash "$script_dir/app-ssh-auth.sh" "$command" "$account" --days "$days"; then
-      echo "Certificate setup failed. No bundle issued. Remove the incomplete account using Delete certificate account in the certificate menu before retrying." >&2
+      echo "Certificate setup failed. No bundle issued. Remove the incomplete account using Remove account in the certificate menu before retrying." >&2
       exit 1
     fi
     ;;
