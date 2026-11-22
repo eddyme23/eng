@@ -516,10 +516,10 @@ class AppSshAuthTest(unittest.TestCase):
             self.assertEqual(path.read_bytes(), bundle)
             self.assertEqual(self.m.read_db(), db)
 
-    def test_pasted_shared_json_matches_file_import_and_stops_at_end(self):
+    def test_pasted_shared_json_matches_file_import_and_stops_at_complete_object(self):
         from io import StringIO
         data = self.shared_fixture()
-        source = StringIO(json.dumps(data, indent=2) + '\nEND\n00\n')
+        source = StringIO(json.dumps(data, indent=2) + '\n00\n')
         pasted = self.m.read_shared_authorization(stream=source)
         self.assertEqual(pasted, self.m.validate_shared(data))
         self.assertEqual(source.read(), '00\n')
@@ -563,3 +563,12 @@ class AppSshAuthTest(unittest.TestCase):
             self.assertEqual(self.m.certificate_choices('shared-revoke'), [])
             with self.assertRaisesRegex(ValueError, 'not found'):
                 self.m.certificate_info('eddy', 'a'*32)
+
+    def test_compact_and_formatted_paste_finish_without_end_or_eof(self):
+        from io import StringIO
+        data = self.shared_fixture()
+        data['publicKey'] += ' comment with } and { braces'
+        for indent in (None, 2):
+            source = StringIO(json.dumps(data, indent=indent) + '\nNEXT MENU INPUT\n')
+            self.assertEqual(self.m.read_shared_authorization(stream=source), self.m.validate_shared(data))
+            self.assertEqual(source.read(), 'NEXT MENU INPUT\n')

@@ -622,6 +622,12 @@ def read_shared_authorization(file=None, stream=None):
             if size > 16384:
                 raise ValueError('Pasted public authorization exceeds 16 KiB')
             chunks.append(line)
+            raw = ''.join(chunks)
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                continue  # More lines may complete a formatted JSON object.
+            return validate_shared(data)
         raw = ''.join(chunks)
     else:
         with file.open('rb') as source:
@@ -758,7 +764,7 @@ def main():
     shared.add_argument('--identity', help='Export this identity; otherwise prefer the local certificate')
     shared = commands.add_parser('shared-import')
     shared.add_argument('file', type=Path, nargs='?')
-    shared.add_argument('--paste', action='store_true', help='Paste public JSON followed by END')
+    shared.add_argument('--paste', action='store_true', help='Paste public JSON; completes automatically')
     audit = commands.add_parser('audit')
     audit.add_argument('username')
     pins = commands.add_parser('pins')
@@ -786,7 +792,7 @@ def main():
         if args.paste == (args.file is not None):
             parser.error('Use shared-import FILE or shared-import --paste')
         if args.paste:
-            print('Paste PUBLIC JSON from option 08, then END on its own line. No private Gen bundle.', file=sys.stderr)
+            print('Paste PUBLIC JSON from option 08. Import starts automatically after the complete JSON; press Enter once if needed. No END required. No private Gen bundle.', file=sys.stderr)
         args.shared_data = read_shared_authorization(args.file, sys.stdin if args.paste else None)
         name = args.shared_data['username']
         try:

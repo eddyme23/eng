@@ -29,7 +29,9 @@ bash ./app-ssh-auth.sh shared-import /root/ACCOUNT-public.json
 ```
 
 For copy/paste, choose option 08 on B, copy only the JSON from `{` through `}`,
-then choose option 09 on A, paste it, and type `END` on a new line. Repeat for C.
+then choose option 09 on A and paste it. Import starts when the complete JSON is
+received; press Enter once if the pasted final line has no newline. Do not type
+`END`. Repeat for C.
 No file is needed with the menu. File import commands above still work.
 
 The paste command is also available directly:
