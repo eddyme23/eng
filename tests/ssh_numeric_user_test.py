@@ -1,11 +1,11 @@
-import os, shutil, subprocess, unittest
+import os, shutil, subprocess, unittest, tempfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 BASH=r"C:/Program Files/Git/bin/bash.exe" if os.name=="nt" else shutil.which("bash")
 SOURCE=(ROOT/'ssh-accounts.sh').read_text(encoding='utf-8')
 VALID=SOURCE[SOURCE.index('valid_user()'):SOURCE.index('account_uid_by_name()')]
 CREATE=SOURCE[SOURCE.index('create_system_account()'):SOURCE.index('valid_days()')]
-DELETE=SOURCE[SOURCE.index('retire_app_credentials()'):SOURCE.index('case "$action" in')]
+DELETE=SOURCE[SOURCE.index('retire_app_credentials()'):SOURCE.index('script_dir=')]
 class NumericUserTest(unittest.TestCase):
  def test_certificate_creation_passes_real_dispatch_and_reaches_account_commit(self):
   dispatch=SOURCE[SOURCE.index('case "$action" in'):]
@@ -21,7 +21,9 @@ openssl() { printf 'synthetic-secret'; }; date() { printf '2030-01-01'; }
 jq() { printf '[]'; }; commit() { echo COMMITTED; }
 die() { echo "$*" >&2; exit 1; }
 """
-  r=subprocess.run([BASH,'-c',mocks+dispatch],capture_output=True,text=True)
+  with tempfile.TemporaryDirectory() as folder:
+   script=Path(folder)/'dispatch.sh';script.write_bytes((mocks+dispatch).encode('utf-8'))
+   r=subprocess.run([BASH,script.as_posix()],capture_output=True,text=True)
   self.assertEqual(r.returncode,0,r.stderr)
   self.assertIn('CREATE edd',r.stdout)
   self.assertIn('COMMITTED',r.stdout)

@@ -110,3 +110,25 @@ before distributing production configurations.
 ## Sharing an original certificate across VPS servers
 
 Use menu 08/09 or `shared-export` / `shared-import`, not the existing private-bundle import. See [Shared certificate accounts](SHARED-CERTIFICATE-ACCOUNTS.md) for A/B/C setup, per-destination host pins and coordinated renewal/revocation.
+
+## Separate account management
+
+SSH Account Management lists, renews and deletes password accounts only. Certificate
+accounts remain Linux SSH identities internally but are hidden from that menu;
+direct ordinary `ssh-accounts.sh delete NAME` and `renew NAME DAYS` refuse them too.
+Existing certificate accounts are recognized from their identity database, private
+bundle or certificate-only policy without recreating them. New accounts carry an
+explicit accountType marker, including incomplete certificate setup.
+
+Certificate menu 11 explicitly deletes a certificate account and ALL its local and
+shared identities on this VPS after confirmation. Revocation (03/10) removes the
+selected credential without deleting the Linux account. Deletion does not remove
+copies on another VPS. Use `ssh-accounts.sh list-certificate` to list managed Linux
+certificate accounts, including incomplete accounts without an issued bundle.
+Automatic expired-account cleanup still covers both types; this separation protects
+manual SSH menu operations, not expired accounts. No already deleted account or
+private certificate key is automatically restored by this update.
+
+Separation tests use the real classifier, shell dispatch and jq against temporary
+stores. Linux user operations, permissions and locking are mocked on Windows;
+verify list/renew/delete behavior on a live VPS after refreshing the menu.

@@ -47,7 +47,7 @@ ordinary password account is still refused; this command is for certificate acco
 Repeated imports of the same active identity are safe. A revoked identity cannot be
 restored by import, and changing an existing identity's public key or CA is refused.
 If a newly created account fails setup, inspect the error; remove that incomplete
-account through SSH Account Management before retrying.
+account through certificate menu option 11 before retrying.
 
 Each import is capped by the receiving Linux account's expiry. It prints the local
 authorization expiry and never extends that OS account. To extend access, renew that
@@ -120,7 +120,7 @@ require a separate app/Gen change. Endpoint and DNS settings remain per server.
 Renew only on the issuer using the normal certificate menu. Export the updated
 private bundle to Gen and re-export/re-import the public authorization on every
 replica to extend its authorization expiry. Renew a replica's local OS account
-when longer access is needed (`bash ./ssh-accounts.sh renew ACCOUNT DAYS`), then re-import.
+when longer access is needed (`bash ./ssh-accounts.sh renew-certificate ACCOUNT DAYS`), then re-import.
 A keeps renewing/exporting its own local private bundle. Imported identities are
 renewed on their original issuer. Menu list includes each identity ID and local/shared
 origin. `shared-export ACCOUNT` prefers the local identity; use `--identity ID` to

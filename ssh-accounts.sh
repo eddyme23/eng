@@ -100,11 +100,20 @@ delete_system_account() {
   userdel -r "$name"
 }
 
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# The account lock also serializes certificate metadata writers.
+typed_store="$(python3 "$script_dir/ssh-account-types.py" "$store")" || die 'cannot safely determine account types'
+certificate_account() { jq -e --arg name "$1" '.[] | select(.name == $name and .accountType == "certificate")' <<<"$typed_store" >/dev/null; }
+account_rows() { jq --arg kind "$1" '[.[] | select(.accountType == $kind)]' <<<"$typed_store"; }
+
 case "$action" in
-  list) jq -r '.[] | [.name, .expiresAt] | @tsv' "$store"; exit 0 ;;
-  choose-delete)
-    mapfile -t names < <(jq -r '.[].name' "$store")
-    ((${#names[@]})) || die "no v6-managed SSH accounts"
+  list) account_rows password | jq -r '.[] | [.name, .expiresAt] | @tsv'; exit 0 ;;
+  list-certificate) account_rows certificate | jq -r '.[] | [.name, .expiresAt] | @tsv'; exit 0 ;;
+  choose-delete|choose-delete-certificate)
+    kind=password; delete_action=delete
+    if [[ $action == choose-delete-certificate ]]; then kind=certificate; delete_action=delete-certificate; fi
+    mapfile -t names < <(account_rows "$kind" | jq -r '.[].name')
+    ((${#names[@]})) || die "no managed $kind accounts"
     for index in "${!names[@]}"; do printf '  [%02d] %s\n' "$((index+1))" "${names[$index]}"; done
     printf '  [00] Back\n'
     read -r -p '  ► Select account: ' selection || exit 0
@@ -112,10 +121,14 @@ case "$action" in
     selection=$((10#$selection))
     ((selection == 0)) && exit 0
     ((selection >= 1 && selection <= ${#names[@]})) || { echo 'Invalid selection. Returning to SSH menu.'; exit 0; }
-    exec "$0" delete "${names[$((selection-1))]}"
+    if [[ $delete_action == delete-certificate ]]; then
+      read -r -p 'Delete certificate account and ALL its identities on this VPS? [y/N] ' confirm || exit 0
+      [[ $confirm =~ ^[Yy]$ ]] || exit 0
+    fi
+    exec "$0" "$delete_action" "${names[$((selection-1))]}"
     ;;
-  create|create-certificate|renew|delete|cleanup) ;;
-  *) die "action must be create, create-certificate, renew, delete, list, choose-delete, or cleanup" ;;
+  create|create-certificate|renew|renew-certificate|delete|delete-certificate|cleanup) ;;
+  *) die "unsupported action (use create, renew, delete, list, choose-delete, certificate variants, or cleanup)" ;;
 esac
 
 if [[ "$action" == "cleanup" ]]; then
@@ -132,8 +145,16 @@ fi
 
 valid_user "$user" || die "invalid username"
 case "$action" in
+  renew|delete) if certificate_account "$user"; then die 'certificate account: use App Certificate Accounts; ordinary SSH management cannot modify it'; fi ;;
+  renew-certificate|delete-certificate) certificate_account "$user" || die 'not a certificate account; use SSH Account Management' ;;
+esac
+case "$action" in
   create|create-certificate)
     valid_days "$days" || die "days must be a positive integer"
+    if [[ $action == create ]]; then
+      reserved_kind="$(python3 "$script_dir/ssh-account-types.py" "$store" --name "$user")" || die 'cannot safely determine account type'
+      [[ $reserved_kind != certificate ]] || die 'name belongs to a certificate identity; use App Certificate Accounts'
+    fi
     managed "$user" && die "account already managed by v6"
     if account_uid_by_name "$user" >/dev/null; then
       die "a Linux user with this name already exists"
@@ -154,7 +175,8 @@ case "$action" in
       userdel -r "$user" || true
       die "account creation failed and was rolled back"
     fi
-    commit "$(jq --arg name "$user" --arg expiry "$expiry" '. + [{name:$name,expiresAt:$expiry}]' "$store")"
+    account_type=password; [[ $action != create-certificate ]] || account_type=certificate
+    commit "$(jq --arg name "$user" --arg expiry "$expiry" --arg kind "$account_type" '. + [{name:$name,expiresAt:$expiry,accountType:$kind}]' "$store")"
     if [[ $action == create-certificate ]]; then
       unset password hash
       echo "Created certificate account identity: $user (no customer password)."
@@ -208,7 +230,7 @@ case "$action" in
     printf '%b══════════════════════════════════════════════════════════════%b\n' "$GREEN" "$NC"
     unset password hash
     ;;
-  renew)
+  renew|renew-certificate)
     valid_days "$days" || die "days must be a positive integer"
     managed "$user" || die "account is not v6-managed"
     today="$(date -u +%F)"; current="$(jq -r --arg name "$user" '.[] | select(.name == $name) | .expiresAt' "$store")"
@@ -217,10 +239,14 @@ case "$action" in
     chage -E "$expiry" "$user"
     commit "$(jq --arg name "$user" --arg expiry "$expiry" 'map(if .name == $name then .expiresAt=$expiry else . end)' "$store")"
     ;;
-  delete)
+  delete|delete-certificate)
     managed "$user" || die "account is not v6-managed"
     delete_system_account "$user" || die "could not delete account; its managed record was retained"
     commit "$(jq --arg name "$user" '[.[] | select(.name != $name)]' "$store")"
     ;;
 esac
-[[ "$action" == create ]] || echo "SSH account $action completed: $user"
+case "$action" in
+  renew-certificate|delete-certificate) echo "Certificate account ${action%-certificate} completed: $user" ;;
+  create) ;;
+  *) echo "SSH account $action completed: $user" ;;
+esac
