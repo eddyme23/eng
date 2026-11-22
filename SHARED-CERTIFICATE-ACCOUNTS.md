@@ -28,7 +28,17 @@ cd /root/eng
 bash ./app-ssh-auth.sh shared-import /root/ACCOUNT-public.json
 ```
 
-Menu options 08 and 09 perform the same export/import. Import creates an absent
+For copy/paste, choose option 08 on B, copy only the JSON from `{` through `}`,
+then choose option 09 on A, paste it, and type `END` on a new line. Repeat for C.
+No file is needed with the menu. File import commands above still work.
+
+The paste command is also available directly:
+
+```bash
+bash ./app-ssh-auth.sh shared-import --paste
+```
+
+Menu options 08 and 09 perform the same public authorization export/import. Import creates an absent
 managed Linux account with a random undisclosed password and applies the scoped
 certificate-only SSH policy. If A already has the same certificate account username,
 import adds B's and C's public identities alongside A's own identity. It never replaces

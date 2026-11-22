@@ -515,3 +515,25 @@ class AppSshAuthTest(unittest.TestCase):
             self.assertEqual(self.content, before)
             self.assertEqual(path.read_bytes(), bundle)
             self.assertEqual(self.m.read_db(), db)
+
+    def test_pasted_shared_json_matches_file_import_and_stops_at_end(self):
+        from io import StringIO
+        data = self.shared_fixture()
+        source = StringIO(json.dumps(data, indent=2) + '\nEND\n00\n')
+        pasted = self.m.read_shared_authorization(stream=source)
+        self.assertEqual(pasted, self.m.validate_shared(data))
+        self.assertEqual(source.read(), '00\n')
+        path = self.auth / 'public.json'
+        path.write_text(json.dumps(data))
+        self.assertEqual(self.m.read_shared_authorization(file=path), pasted)
+
+    def test_invalid_or_private_pasted_json_is_rejected_before_import(self):
+        from io import StringIO
+        for text in ('not json\nEND\n', '{}\nEND\n',
+                     json.dumps(dict(self.shared_fixture(), privateKey='secret')) + '\nEND\n',
+                     ' ' * 16385 + '\nEND\n'):
+            with self.subTest(text=text[:30]):
+                with self.assertRaises(ValueError):
+                    self.m.read_shared_authorization(stream=StringIO(text))
+        self.assertFalse((self.auth / 'devices.json').exists())
+        self.assertEqual(self.content, self.before)

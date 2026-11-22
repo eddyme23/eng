@@ -611,6 +611,28 @@ def validate_shared(data):
     return data
 
 
+def read_shared_authorization(file=None, stream=None):
+    if stream is not None:
+        chunks, size = [], 0
+        while True:
+            line = stream.readline(16385)
+            if not line or line.strip() == 'END':
+                break
+            size += len(line.encode('utf-8'))
+            if size > 16384:
+                raise ValueError('Pasted public authorization exceeds 16 KiB')
+            chunks.append(line)
+        raw = ''.join(chunks)
+    else:
+        with file.open('rb') as source:
+            if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+                raise ValueError('Public authorization must be a regular JSON file')
+            raw = source.read(16385)
+        if len(raw) > 16384:
+            raise ValueError('Oversized public authorization package')
+    return validate_shared(json.loads(raw))
+
+
 def shared_import(data, new_account=False):
     data = validate_shared(data)
     username = data['username']
@@ -700,7 +722,8 @@ def main():
     shared.add_argument('username')
     shared.add_argument('--identity', help='Export this identity; otherwise prefer the local certificate')
     shared = commands.add_parser('shared-import')
-    shared.add_argument('file', type=Path)
+    shared.add_argument('file', type=Path, nargs='?')
+    shared.add_argument('--paste', action='store_true', help='Paste public JSON followed by END')
     audit = commands.add_parser('audit')
     audit.add_argument('username')
     pins = commands.add_parser('pins')
@@ -725,13 +748,11 @@ def main():
         args.bundle_data = read_pasted_bundle(sys.stdin)
     if args.action == 'shared-import':
         import pwd
-        with args.file.open('rb') as stream:
-            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
-                raise ValueError('Public authorization must be a regular JSON file')
-            raw = stream.read(16385)
-        if len(raw) > 16384:
-            raise ValueError('Oversized public authorization package')
-        args.shared_data = validate_shared(json.loads(raw))
+        if args.paste == (args.file is not None):
+            parser.error('Use shared-import FILE or shared-import --paste')
+        if args.paste:
+            print('Paste PUBLIC JSON from option 08, then END on its own line. No private Gen bundle.', file=sys.stderr)
+        args.shared_data = read_shared_authorization(args.file, sys.stdin if args.paste else None)
         name = args.shared_data['username']
         try:
             pwd.getpwnam(name)

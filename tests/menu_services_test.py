@@ -48,7 +48,7 @@ class MenuServicesTest(unittest.TestCase):
             ('06\ncustomer1\n30\n00\n', 'certificate-accounts.sh import customer1 30'),
             ('07\ncustomer1\n00\n', 'certificate-details.sh customer1'),
             ('08\ncustomer1\n00\n', 'app-ssh-auth.sh shared-export customer1'),
-            ('09\n/root/customer1-public.json\n00\n', 'app-ssh-auth.sh shared-import /root/customer1-public.json'),
+            ('09\n00\n', 'app-ssh-auth.sh shared-import --paste'),
             ('10\ncustomer1\n' + 'a' * 32 + '\n00\n', 'app-ssh-auth.sh revoke customer1 certificate-account --identity ' + 'a' * 32),
         ]
         for data, expected in cases:
