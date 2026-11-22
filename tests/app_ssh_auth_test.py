@@ -572,3 +572,62 @@ class AppSshAuthTest(unittest.TestCase):
             source = StringIO(json.dumps(data, indent=indent) + '\nNEXT MENU INPUT\n')
             self.assertEqual(self.m.read_shared_authorization(stream=source), self.m.validate_shared(data))
             self.assertEqual(source.read(), 'NEXT MENU INPUT\n')
+
+    def proxy_fixture(self):
+        return dict(schema=1, type='eng-ssh-proxy-details', ipv4='8.8.8.8',
+                    hostPublicKey=self.public, sshHostKeyPin=self.m.fingerprint(self.public))
+
+    def test_proxy_export_needs_no_certificate_account_or_ca_private_key(self):
+        real_run = self.m.run
+        def run(*args):
+            if args[0] == '/usr/sbin/sshd':
+                return SimpleNamespace(stdout='hostkey ' + str(self.auth / 'ca') + '\n')
+            if args[0] == 'curl':
+                return SimpleNamespace(stdout='8.8.8.8\n')
+            return real_run(*args)
+        with patch.object(self.m, 'run', side_effect=run), patch.object(self.m, 'authority') as authority, patch.object(self.m, 'account') as account:
+            self.m.STATE = self.auth
+            (self.auth / 'sshd-backend.conf').write_text('# fixture SSH config\n')
+            data = self.m.export_proxy('8.8.8.8', self.auth / 'ca.pub')
+            self.assertEqual(data, self.proxy_fixture())
+            self.assertEqual(self.m.export_proxy('', self.auth / 'ca.pub'), data)
+            with self.assertRaisesRegex(ValueError, 'not a configured host key'):
+                self.m.export_proxy('8.8.8.8', self.base / 'device.pub')
+            authority.assert_not_called();account.assert_not_called()
+            self.assertFalse((self.auth / 'devices.json').exists())
+            self.assertNotIn('privateKey', data)
+            self.assertNotIn('PRIVATE KEY', json.dumps(data))
+
+    def test_saved_proxy_exports_change_only_pin_and_leave_direct_bundle_unchanged(self):
+        with self.patches(), patch.object(self.m, 'policy_module'), patch.object(self.m, 'pin_policy', return_value={'genPolicy': {'SSHHostKeyPin': 'original-direct-pin'}}):
+            path = self.m.create_bundle(self.bundle_args())
+            before = path.read_bytes()
+            proxy = self.proxy_fixture()
+            self.m.save_proxy(proxy)
+            exported = self.m.export_bundle('eddy', use_proxy=True)
+            self.assertEqual(exported['genPolicy']['SSHHostKeyPin'], proxy['sshHostKeyPin'])
+            self.assertEqual(self.m.export_bundle('eddy')['genPolicy']['SSHHostKeyPin'], 'original-direct-pin')
+            self.assertEqual(path.read_bytes(), before)
+            for field in ('certificate','privateKey','deviceId','username','caPublicKey','udpCustom'):
+                self.assertEqual(exported[field], json.loads(before)[field])
+            self.assertEqual(self.m.saved_proxy(), proxy)
+            with self.assertRaisesRegex(ValueError, 'not both'):
+                self.m.export_bundle('eddy', 'SHA256:' + 'A'*43, use_proxy=True)
+            self.m.proxy_path().unlink()
+            self.assertIsNone(self.m.saved_proxy())
+            with self.assertRaisesRegex(ValueError, 'No saved proxy'):
+                self.m.export_bundle('eddy', use_proxy=True)
+
+    def test_proxy_paste_is_validated_and_cannot_overwrite_with_account_bundle(self):
+        from io import StringIO
+        proxy = self.proxy_fixture()
+        self.m.save_proxy(proxy)
+        before = self.m.proxy_path().read_bytes()
+        stream = StringIO(json.dumps(proxy, indent=2) + '\nnext input\n')
+        self.assertEqual(self.m.validate_proxy(self.m.read_public_json(stream)), proxy)
+        self.assertEqual(stream.read(), 'next input\n')
+        for invalid in (dict(proxy, sshHostKeyPin='SHA256:'+'A'*43), dict(proxy, ipv4='127.0.0.1'),
+                        dict(proxy, ipv4='invalid'), dict(proxy, ipv4='224.0.0.1'), dict(proxy, privateKey='secret'),
+                        dict(proxy, type='eng-ssh-account-bundle')):
+            with self.assertRaises(ValueError): self.m.save_proxy(invalid)
+            self.assertEqual(self.m.proxy_path().read_bytes(), before)

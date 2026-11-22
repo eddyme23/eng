@@ -4,6 +4,7 @@ import argparse
 import base64
 import hashlib
 import importlib.util
+import ipaddress
 from contextlib import contextmanager, ExitStack
 from datetime import datetime, timedelta, timezone
 import json
@@ -392,6 +393,15 @@ def pin_policy(username, host_key):
     user, _ = account(username)
     backend_policy(user)
     transport_policy()
+    key, allowed = configured_host_key(host_key)
+    ca = authority()
+    return dict(username=username, genPolicy=dict(SSHAuthMethod='device_certificate',
+                SSHCertificateCA=fingerprint(ca), SSHHostKeyPin=fingerprint(key)),
+                hostKeyAlgorithm=key.split()[0], configuredHostPublicKeys=allowed,
+                note='Pin must match the actually negotiated SSH host key; this is not a TLS or user CA host pin.')
+
+
+def configured_host_key(host_key):
     allowed = []
     for config in (Path('/etc/ssh/sshd_config'), STATE / 'sshd-backend.conf'):
         if config.exists():
@@ -400,14 +410,14 @@ def pin_policy(username, host_key):
             if host_key not in configured:
                 raise ValueError(f'{host_key} is not a configured host key for {config}')
             allowed.extend(map(str, configured))
+    if not allowed:
+        raise ValueError('No installed SSH configuration uses this host key')
     fields = host_key.read_text().split()
     if len(fields) < 2:
         raise ValueError('Invalid host public key')
-    ca = authority()
-    return dict(username=username, genPolicy=dict(SSHAuthMethod='device_certificate',
-                SSHCertificateCA=fingerprint(ca), SSHHostKeyPin=fingerprint(' '.join(fields[:2]))),
-                hostKeyAlgorithm=fields[0], configuredHostPublicKeys=sorted(set(allowed)),
-                note='Pin must match the actually negotiated SSH host key; this is not a TLS or user CA host pin.')
+    key = public_key(' '.join(fields[:2]))
+    run(KEYGEN, '-l', '-f', host_key)
+    return key, sorted(set(allowed))
 
 
 def purge_account(username):
@@ -551,11 +561,18 @@ def renew_bundle(args):
     return bundle_path(args.username)
 
 
-def export_bundle(username, host_pin=None):
+def export_bundle(username, host_pin=None, use_proxy=False):
     account(username)
     data, _ = read_bundle(username)
     if datetime.fromisoformat(data['validBefore']) <= datetime.now(timezone.utc):
         raise ValueError('Certificate expired; renew first')
+    if use_proxy:
+        if host_pin:
+            raise ValueError('Choose saved proxy or manual host pin, not both')
+        proxy = saved_proxy()
+        if proxy is None:
+            raise ValueError('No saved proxy. Paste its public details in certificate menu option 13 first.')
+        host_pin = proxy['sshHostKeyPin']
     if host_pin:
         if not re.fullmatch(r'SHA256:[A-Za-z0-9+/]{43}', host_pin):
             raise ValueError('Expected a verified SHA256 OpenSSH host fingerprint')
@@ -611,32 +628,82 @@ def validate_shared(data):
     return data
 
 
+def read_public_json(stream):
+    chunks, size = [], 0
+    while True:
+        line = stream.readline(16385)
+        if not line or line.strip() == 'END':
+            break
+        size += len(line.encode('utf-8'))
+        if size > 16384:
+            raise ValueError('Pasted public JSON exceeds 16 KiB')
+        chunks.append(line)
+        try:
+            return json.loads(''.join(chunks))
+        except json.JSONDecodeError:
+            continue
+    return json.loads(''.join(chunks))
+
+
 def read_shared_authorization(file=None, stream=None):
     if stream is not None:
-        chunks, size = [], 0
-        while True:
-            line = stream.readline(16385)
-            if not line or line.strip() == 'END':
-                break
-            size += len(line.encode('utf-8'))
-            if size > 16384:
-                raise ValueError('Pasted public authorization exceeds 16 KiB')
-            chunks.append(line)
-            raw = ''.join(chunks)
-            try:
-                data = json.loads(raw)
-            except json.JSONDecodeError:
-                continue  # More lines may complete a formatted JSON object.
-            return validate_shared(data)
-        raw = ''.join(chunks)
-    else:
-        with file.open('rb') as source:
-            if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
-                raise ValueError('Public authorization must be a regular JSON file')
-            raw = source.read(16385)
-        if len(raw) > 16384:
-            raise ValueError('Oversized public authorization package')
+        return validate_shared(read_public_json(stream))
+    with file.open('rb') as source:
+        if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+            raise ValueError('Public authorization must be a regular JSON file')
+        raw = source.read(16385)
+    if len(raw) > 16384:
+        raise ValueError('Oversized public authorization package')
     return validate_shared(json.loads(raw))
+
+
+def validate_proxy(data):
+    fields = {'schema', 'type', 'ipv4', 'hostPublicKey', 'sshHostKeyPin'}
+    if not isinstance(data, dict) or set(data) != fields or data['schema'] != 1 or data['type'] != 'eng-ssh-proxy-details':
+        raise ValueError('Paste public proxy details from option 12, not an account bundle')
+    if any(not isinstance(data[key], str) for key in fields - {'schema'}):
+        raise ValueError('Invalid proxy field types')
+    address = ipaddress.IPv4Address(data['ipv4'])
+    if not address.is_global or address.is_multicast:
+        raise ValueError('Proxy must have a public IPv4 address')
+    key = public_key(data['hostPublicKey'])
+    if not key.startswith('ssh-ed25519 '):
+        raise ValueError('Expected an Ed25519 SSH host key')
+    # Verify full key structure, not just a matching digest of arbitrary bytes.
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / 'host.pub'
+        path.write_text(key + '\n')
+        run(KEYGEN, '-l', '-f', path)
+    if fingerprint(key) != data['sshHostKeyPin']:
+        raise ValueError('Proxy SSH fingerprint does not match its public host key')
+    return dict(data, ipv4=str(address), hostPublicKey=key)
+
+
+def export_proxy(ipv4, host_key):
+    key, _ = configured_host_key(host_key)
+    if not ipv4:
+        ipv4 = run('curl', '-4fsS', '--connect-timeout', '3', '--max-time', '5', 'https://api.ipify.org').stdout.strip()
+    return validate_proxy(dict(schema=1, type='eng-ssh-proxy-details', ipv4=ipv4,
+                               hostPublicKey=key, sshHostKeyPin=fingerprint(key)))
+
+
+def proxy_path():
+    path = AUTH / 'proxy.json'
+    if path.is_symlink():
+        raise ValueError('Unsafe saved proxy path')
+    return path
+
+
+def saved_proxy():
+    path = proxy_path()
+    return validate_proxy(json.loads(path.read_text())) if path.exists() else None
+
+
+def save_proxy(data):
+    data = validate_proxy(data)
+    atomic(proxy_path(), (json.dumps(data, indent=2) + '\n').encode())
+    print('Saved certificate-export proxy:', data['ipv4'], data['sshHostKeyPin'])
+    print('Choose Direct or Saved proxy when exporting for Gen. Account authorization on the proxy is still required.')
 
 
 def shared_import(data, new_account=False):
@@ -740,6 +807,7 @@ def main():
     for action in ('bundle-create', 'bundle-import', 'bundle-renew', 'bundle-export', 'bundle-check'):
         bundle = commands.add_parser(action)
         bundle.add_argument('username')
+        bundle.add_argument('--proxy', action='store_true', help='Use saved proxy host pin; export only')
         bundle.add_argument('--host-pin', help='Verified destination host fingerprint; export only')
         bundle.add_argument('--days', type=int, default=30)
         bundle.add_argument('--host-key', type=Path, default=Path('/etc/ssh/ssh_host_ed25519_key.pub'))
@@ -754,6 +822,12 @@ def main():
     cancel.add_argument('--identity', help='Revoke only this identity; otherwise prefer the local certificate')
     commands.add_parser('list')
     commands.add_parser('bundle-list')
+    proxy = commands.add_parser('proxy-export')
+    proxy.add_argument('--ip', default='', help='Public IPv4; auto-detect if omitted')
+    proxy.add_argument('--host-key', type=Path, default=Path('/etc/ssh/ssh_host_ed25519_key.pub'))
+    commands.add_parser('proxy-save')
+    commands.add_parser('proxy-status')
+    commands.add_parser('proxy-clear')
     choices = commands.add_parser('choices')
     choices.add_argument('mode', choices=('renew', 'revoke', 'gen', 'details', 'share', 'shared-revoke'))
     info = commands.add_parser('certificate-info')
@@ -782,8 +856,8 @@ def main():
     args = parser.parse_args()
     if sys.platform != 'linux' or os.geteuid() != 0:
         parser.error('Run as root on the Linux VPS')
-    if getattr(args, 'host_pin', None) and args.action != 'bundle-export':
-        parser.error('--host-pin is only available for bundle-export')
+    if (getattr(args, 'host_pin', None) or getattr(args, 'proxy', False)) and args.action != 'bundle-export':
+        parser.error('--host-pin and --proxy are only available for bundle-export')
     if args.action == 'bundle-import':
         print('Paste ENG JSON, then END on its own line. A new local certificate will be issued.', file=sys.stderr)
         args.bundle_data = read_pasted_bundle(sys.stdin)
@@ -801,6 +875,9 @@ def main():
             days = (datetime.fromisoformat(args.shared_data['validBefore']) - datetime.now(timezone.utc)).days + 2
             run('bash', Path(__file__).with_name('ssh-accounts.sh'), 'create-certificate', name, str(days))
             args.shared_new_account = True
+    if args.action == 'proxy-save':
+        print('Paste PUBLIC proxy JSON from option 12 on your trusted proxy VPS. Completes automatically; no END required.', file=sys.stderr)
+        args.proxy_data = validate_proxy(read_public_json(sys.stdin))
     import fcntl
     os.umask(0o077)
     if AUTH.is_symlink():
@@ -826,7 +903,7 @@ def main():
         elif args.action == 'bundle-check':
             read_bundle(args.username)
         elif args.action == 'bundle-export':
-            print(json.dumps(export_bundle(args.username, args.host_pin), indent=2))
+            print(json.dumps(export_bundle(args.username, args.host_pin, args.proxy), indent=2))
         elif args.action == 'enroll':
             print(json.dumps(enroll(args), indent=2))
         elif args.action == 'revoke':
@@ -835,6 +912,15 @@ def main():
             print(json.dumps(shared_export(args.username, args.identity), indent=2))
         elif args.action == 'shared-import':
             shared_import(args.shared_data, getattr(args, 'shared_new_account', False))
+        elif args.action == 'proxy-export':
+            print(json.dumps(export_proxy(args.ip, args.host_key), indent=2))
+        elif args.action == 'proxy-save':
+            save_proxy(args.proxy_data)
+        elif args.action == 'proxy-status':
+            print(json.dumps(saved_proxy()))
+        elif args.action == 'proxy-clear':
+            proxy_path().unlink(missing_ok=True)
+            print('Saved proxy removed. Certificate accounts and SSH configuration unchanged.')
         elif args.action == 'choices':
             print(json.dumps(certificate_choices(args.mode)))
         elif args.action == 'certificate-info':

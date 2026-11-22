@@ -90,6 +90,49 @@ The imported CA is authorized only for this username and principal, with forward
 and a forced false command. The issuer can reissue certificates for that principal;
 local authorization expiry and local account expiry still cap access.
 
+## Save proxy A once, without typing fingerprints
+
+After updating each VPS, on A open App Certificate Accounts and choose **12**.
+Copy the complete public proxy JSON. A does not need a certificate account first.
+The SSH host key is read locally and checked against the installed SSH configs;
+there is no network SSH fingerprint lookup. The public IPv4 is detected using
+api.ipify.org. If detection fails or the proxy uses a different inbound IP, run
+`bash ./app-ssh-auth.sh proxy-export --ip A_PUBLIC_IPV4` on A instead.
+
+On B/C choose **13** and paste A's JSON. It completes automatically, without END.
+Only copy this package from your trusted A console; it establishes trust in that
+server's public host key. The public key and fingerprint must match before saving.
+Saving replaces this VPS's previous saved proxy. It changes no accounts or SSH config.
+
+Choose **05** on B/C, select the account, then select:
+
+- **01 Direct:** keep the issuing VPS's host pin.
+- **02 Saved proxy:** export the same account using saved A's host pin.
+
+No saved proxy means option 05 keeps its existing direct-export behavior. Gen and
+the app need no new bundle format or app code: only the existing SSHHostKeyPin
+field changes in the exported copy. Configure the actual proxy address/transport
+in Gen as before; saving a proxy does not route traffic or alter profile endpoints.
+B/C public account authorization must still be imported into A using **08 -> 09**.
+
+The saved setting affects SSH certificate exports only, including their supported
+SSH transports. Password accounts, other protocols, stored account bundles and
+private keys are unchanged. Your working A path terminates SSH on A; if a proxy
+only forwards SSH to B instead, use B's host pin (Direct).
+
+Command-line equivalents:
+
+```bash
+bash ./app-ssh-auth.sh proxy-export
+bash ./app-ssh-auth.sh proxy-save
+bash ./app-ssh-auth.sh proxy-status
+bash ./app-ssh-auth.sh bundle-export ACCOUNT --proxy
+bash ./app-ssh-auth.sh proxy-clear
+```
+
+`proxy-clear` removes only the saved export preference. If A's host key rotates,
+copy a new package from A and paste it again on B/C, then re-export to Gen.
+
 ## Gen and server host verification
 
 Keep the ORIGINAL private Gen bundle from the issuing VPS. Its certificate,
@@ -153,3 +196,9 @@ independent renewal/revocation, idempotence, changed-key/revoked identity reject
 account operations are mocked on Windows. Live Linux SSH certificate login through
 A and directly to B/C, host pin selection, reconnects, expiry/revocation and reboot
 persistence must still be verified on VPS servers before broad rollout.
+
+Saved-proxy tests use real OpenSSH keys and verify matching fingerprints, bounded
+automatic paste, rejection of private bundles and altered pins, direct/proxy export
+selection, and unchanged stored credentials. SSH config inspection and public-IP
+lookup are mocked locally. Live option 12 IP detection, paste on B/C and subsequent
+app login/browsing/reconnect through A still need VPS verification.

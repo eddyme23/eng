@@ -138,3 +138,11 @@ origin and a short identity ID when usernames repeat. Renew and private Gen expo
 show locally issued accounts; shared-authorization removal shows shared identities.
 Create/import still ask for the new username. Back (0/00), invalid selections, empty
 lists and EOF do not run the selected action or require an extra pause.
+
+## Saved proxy exports
+
+Option 12 shows this VPS's public proxy IP/key/fingerprint JSON without needing
+an account. Option 13 pastes and saves it on another VPS. Option 05 then offers
+Direct or Saved proxy; only the exported copy's SSHHostKeyPin changes. Public
+account authorization (08/09) is still required on the proxy. See
+[Shared certificate accounts](SHARED-CERTIFICATE-ACCOUNTS.md) for the A/B/C steps.

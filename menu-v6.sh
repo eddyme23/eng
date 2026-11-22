@@ -67,6 +67,24 @@ pick_certificate() {
   pick_account_rows "$rows" Certificate
 }
 
+choose_certificate_export_target() {
+  local proxy target
+  export_flags=()
+  proxy="$(bash "$script_dir/app-ssh-auth.sh" proxy-status)" || return 1
+  [[ $proxy != null ]] || return 0
+  menu_title 'CERTIFICATE EXPORT TARGET'
+  item 1 'Direct: this VPS'
+  item 2 "Saved proxy: $(jq -r .ipv4 <<<"$proxy")"
+  back_item
+  read_menu_option target '  ► Export target: ' || return 1
+  case "$target" in
+    1) return 0 ;;
+    2) export_flags=(--proxy); return 0 ;;
+    0) return 1 ;;
+    *) echo 'Invalid selection. Returning to account menu.'; return 1 ;;
+  esac
+}
+
 show_ports() {
   local server_ip os_name arch cores now ram cpu buffer idle idle2 total total2 work
   server_ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i == "src") {print $(i+1); exit}}')"
@@ -245,20 +263,22 @@ ssh_menu() {
 app_cert_menu() {
   while true; do
     clear; menu_title 'APP CERTIFICATE ACCOUNTS'
-    item 1 'Create certificate account'; item 2 'Renew certificate account'; item 3 'Revoke certificate account'; item 4 'List certificate accounts'; item 5 'Export certificate for Gen'; item 6 'Import existing certificate JSON'; item 7 'Show certificate connection details'; item 8 'Export shared authorization for another VPS'; item 9 'Paste shared authorization JSON'; item 10 'Revoke one shared certificate identity'; item 11 'Delete certificate account and all its identities'; back_item
+    item 1 'Create certificate account'; item 2 'Renew certificate account'; item 3 'Revoke certificate account'; item 4 'List certificate accounts'; item 5 'Export certificate for Gen'; item 6 'Import existing certificate JSON'; item 7 'Show certificate connection details'; item 8 'Export shared authorization for another VPS'; item 9 'Paste shared authorization JSON'; item 10 'Revoke one shared certificate identity'; item 11 'Delete certificate account and all its identities'; item 12 'Show this VPS proxy details (public JSON)'; item 13 'Save proxy details (paste public JSON)'; back_item
     read_menu_option x '  ► Option: ' || return
     case "$x" in
       1) ask_account; bash "$script_dir/certificate-accounts.sh" create "$account" "$validity"; pause ;;
       2) if pick_certificate renew; then read -r -p 'Validity (days): ' validity; bash "$script_dir/certificate-accounts.sh" renew "$account" "$validity"; pause; fi ;;
       3) if pick_certificate revoke; then bash "$script_dir/app-ssh-auth.sh" revoke "$account" certificate-account --identity "$identity"; pause; fi ;;
       4) bash "$script_dir/app-ssh-auth.sh" bundle-list; pause ;;
-      5) if pick_certificate gen; then bash "$script_dir/app-ssh-auth.sh" bundle-export "$account"; pause; fi ;;
+      5) if pick_certificate gen && choose_certificate_export_target; then bash "$script_dir/app-ssh-auth.sh" bundle-export "$account" "${export_flags[@]}"; pause; fi ;;
       6) ask_account; bash "$script_dir/certificate-accounts.sh" import "$account" "$validity"; pause ;;
       7) if pick_certificate details; then if [[ $selected_local == true ]]; then bash "$script_dir/certificate-details.sh" "$account"; else bash "$script_dir/certificate-details.sh" "$account" "$identity"; fi; pause; fi ;;
       8) if pick_certificate share; then bash "$script_dir/app-ssh-auth.sh" shared-export "$account" --identity "$identity"; pause; fi ;;
       9) bash "$script_dir/app-ssh-auth.sh" shared-import --paste; pause ;;
       10) if pick_certificate shared-revoke; then bash "$script_dir/app-ssh-auth.sh" revoke "$account" certificate-account --identity "$identity"; pause; fi ;;
       11) if pick_ssh_account certificate; then read -r -p 'Delete this certificate account and ALL its identities on this VPS? [y/N] ' confirm; [[ $confirm =~ ^[Yy]$ ]] && bash "$script_dir/ssh-accounts.sh" delete-certificate "$account"; pause; fi ;;
+      12) bash "$script_dir/app-ssh-auth.sh" proxy-export; pause ;;
+      13) bash "$script_dir/app-ssh-auth.sh" proxy-save; pause ;;
       0) return ;; *) echo 'Invalid option.'; sleep 1 ;;
     esac
   done
