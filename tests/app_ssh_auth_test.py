@@ -631,3 +631,28 @@ class AppSshAuthTest(unittest.TestCase):
                         dict(proxy, type='eng-ssh-account-bundle')):
             with self.assertRaises(ValueError): self.m.save_proxy(invalid)
             self.assertEqual(self.m.proxy_path().read_bytes(), before)
+
+    def test_deleted_revoked_username_can_receive_fresh_bundle_without_reactivating_old_identity(self):
+        with self.patches(), patch.object(self.m, 'policy_module'), patch.object(self.m, 'pin_policy', return_value={'genPolicy': {}}), patch.dict(sys.modules, {'pwd': SimpleNamespace(getpwnam=lambda _: self.user)}):
+            args = self.bundle_args()
+            original = json.loads(self.m.create_bundle(args).read_text())
+            old_public_authorization = self.m.shared_export('eddy')
+            self.m.revoke(SimpleNamespace(username='eddy', device='certificate-account'))
+            replacement = json.loads(self.m.create_bundle(args).read_text())
+            self.assertNotEqual(replacement['deviceId'], original['deviceId'])
+            self.assertNotEqual(replacement['privateKey'], original['privateKey'])
+            self.assertNotEqual(replacement['publicKey'], original['publicKey'])
+            records = self.m.read_db()['devices']
+            self.assertEqual([r['status'] for r in records], ['revoked','active'])
+            self.assertNotIn(('eng-app-' + original['deviceId']).encode(), self.content)
+            self.assertIn(('eng-app-' + replacement['deviceId']).encode(), self.content)
+            with self.assertRaisesRegex(ValueError, 'revoked'):
+                self.m.shared_import(old_public_authorization)
+            with self.assertRaisesRegex(ValueError, 'already has credentials'):
+                self.m.create_bundle(args)
+            # Default revocation must target the replacement, not the old tombstone.
+            self.m.revoke(SimpleNamespace(username='eddy', device='certificate-account'))
+            self.assertFalse(self.m.bundle_path('eddy').exists())
+            self.assertTrue(all(r['status'] == 'revoked' for r in self.m.read_db()['devices']))
+            third = json.loads(self.m.create_bundle(args).read_text())
+            self.assertNotIn(third['deviceId'], [original['deviceId'], replacement['deviceId']])

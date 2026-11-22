@@ -273,8 +273,8 @@ def enroll(args):
         raise ValueError('Certificate validity must be 1â€“90 days, capped by account expiry')
     db = read_db()
     previous_db = json.loads(json.dumps(db))
-    if any(d['username'] == args.username and d['device'] == args.device for d in db['devices']):
-        raise ValueError('Device label already exists; revoke it and use a new label for replacement')
+    if any(d['username'] == args.username and d['device'] == args.device and d['status'] != 'revoked' for d in db['devices']):
+        raise ValueError('Device label already exists; revoke it before issuing a replacement')
     fd = os.open(args.public_key, os.O_RDONLY | getattr(os, 'O_NONBLOCK', 0) |
                  getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_BINARY', 0))
     with os.fdopen(fd, 'rb') as stream:
@@ -348,10 +348,14 @@ def revoke(args):
     identity = getattr(args, 'identity', None)
     if identity:
         matches = [d for d in matches if d['id'] == identity]
-    elif len(matches) > 1:
-        local = [d for d in matches if not d.get('shared')]
-        if len(local) == 1:
-            matches = local
+    else:
+        active = [d for d in matches if d['status'] == 'active']
+        if active:
+            matches = active
+        if len(matches) > 1:
+            local = [d for d in matches if not d.get('shared')]
+            if len(local) == 1:
+                matches = local
     if len(matches) != 1:
         raise ValueError('Select one certificate identity with --identity (see bundle-list)')
     record = matches[0]
@@ -499,7 +503,7 @@ def create_bundle(args):
     account(args.username)
     if not 1 <= args.days <= 3650:
         raise ValueError('Certificate validity must be 1-3650 days')
-    if any(d['username'] == args.username for d in read_db()['devices']):
+    if any(d['username'] == args.username and d['status'] != 'revoked' for d in read_db()['devices']):
         raise ValueError('Account already has credentials; renew or use a new account name')
     if bundle_path(args.username).exists() or bundle_path(args.username).is_symlink():
         raise ValueError('Bundle already exists')

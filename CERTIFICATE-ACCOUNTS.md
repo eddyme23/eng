@@ -148,3 +148,10 @@ an account. Option 13 pastes and saves it on another VPS. Option 05 then offers
 Direct or Saved proxy; only the exported copy's SSHHostKeyPin changes. Public
 account authorization (08/09) is still required on the proxy. See
 [Shared certificate accounts](SHARED-CERTIFICATE-ACCOUNTS.md) for the A/B/C steps.
+
+After deleting a certificate account, its username can be used again for a new
+certificate account. ENG retains the old revoked identity as history and issues a
+fresh key and identity; it never restores the old certificate. Export the new Gen
+bundle and re-share its public authorization where needed. If an earlier failed
+creation left an incomplete Linux account, remove it with certificate menu 11,
+then create again. Do not remove revoked database records manually.
