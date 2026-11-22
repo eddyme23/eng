@@ -8,11 +8,11 @@ all servers. A still needs a local Linux identity for every account it authentic
 ## Export one current-format bundle
 
 1. Update ENG on A and the destinations with git pull and refresh-menu-v6.sh.
-2. On A, App Certificate Accounts **06 -> 04**: copy the public proxy JSON.
-3. On B/C, **06 -> 05**: paste A's details once.
+2. On A, App Certificate Accounts **12**: copy the public proxy JSON.
+3. On B/C, **13**: paste A's details once.
 4. Create or keep the account on its original destination VPS.
-5. Use **06 -> 01** on that VPS and **06 -> 02** on A to authorize that account on A.
-6. Use **05 -> 02** on the destination and select its account. Both host approvals are included automatically.
+5. Use **08** on that VPS and **09** on A to authorize that account on A.
+6. Use **05** on the destination and select its account. Both host approvals are included automatically.
 7. Paste that one private JSON bundle into the updated matching Gen, export its
    protected configuration, and use the updated app.
 
