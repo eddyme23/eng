@@ -124,6 +124,21 @@ class MenuServicesTest(unittest.TestCase):
         failed = self.run_shell(prefix + 'bash() { return 1; }; ' + body)
         self.assertIn('CANCELLED', failed.stdout)
 
+    @unittest.skipUnless(JQ, 'jq required')
+    def test_empty_or_failed_renewal_list_keeps_explanation_visible(self):
+        jq_function = 'jq() { ' + shlex.quote(Path(JQ).as_posix()) + ' "$@" | tr -d \'\\r\'; };\n'
+        prefix = ('set -u\nRED= GREEN= YELLOW= BLUE= CYAN= WHITE= BOLD= NC=\n' + self.menu_functions() + '\n' + jq_function
+                  + 'script_dir=/fixture; pause() { echo PAUSED; }; ')
+        empty = self.run_shell(prefix + 'bash() { echo "[]"; }; pick_certificate renew; echo RETURNED')
+        self.assertIn('No locally issued certificate bundles', empty.stdout)
+        self.assertIn('VPS that issued', empty.stdout)
+        self.assertIn('PAUSED', empty.stdout)
+        self.assertIn('RETURNED', empty.stdout)
+        failed = self.run_shell(prefix + 'bash() { echo "fixture error" >&2; return 1; }; pick_certificate renew; echo RETURNED')
+        self.assertIn('Could not load certificate accounts', failed.stdout)
+        self.assertIn('PAUSED', failed.stdout)
+        self.assertIn('fixture error', failed.stderr)
+
     def test_certificate_details_prints_endpoints_without_private_credentials(self):
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)

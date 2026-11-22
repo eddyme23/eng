@@ -38,7 +38,7 @@ pick_account_rows() {
   local rows="$1" label="$2" choice count i
   account= identity= selected_local=
   count="$(jq -er 'length' <<<"$rows")" || { echo 'Cannot read account list.'; return 1; }
-  ((count > 0)) || { echo "No $label accounts available."; return 1; }
+  ((count > 0)) || { echo "No $label accounts available."; pause; return 1; }
   menu_title "SELECT $label ACCOUNT"
   for ((i=0; i<count; i++)); do item "$((i+1))" "$(jq -r --argjson i "$i" '.[$i].label' <<<"$rows")"; done
   back_item
@@ -62,8 +62,22 @@ pick_ssh_account() {
   pick_account_rows "$rows" "$1"
 }
 pick_certificate() {
-  local rows
-  rows="$(bash "$script_dir/app-ssh-auth.sh" choices "$1")" || return 1
+  local rows count
+  if ! rows="$(bash "$script_dir/app-ssh-auth.sh" choices "$1")"; then
+    echo 'Could not load certificate accounts. See the error above.'; pause; return 1
+  fi
+  count="$(jq -er 'if type == "array" then length else error("invalid account list") end' <<<"$rows")" || { echo 'Invalid certificate account list.'; pause; return 1; }
+  if ((count == 0)); then
+    case "$1" in
+      renew) echo 'No locally issued certificate bundles are available to renew.'
+        echo 'Shared authorizations must be renewed on the VPS that issued the original certificate.'
+        echo 'If this VPS issued it, its private bundle may be missing or its account may have been deleted.' ;;
+      gen) echo 'No active locally issued certificate bundles are available to export. Export on the issuing VPS.' ;;
+      shared-revoke) echo 'No active shared certificate authorizations are available to remove.' ;;
+      *) echo 'No matching certificate identities are available.' ;;
+    esac
+    pause; return 1
+  fi
   pick_account_rows "$rows" Certificate
 }
 

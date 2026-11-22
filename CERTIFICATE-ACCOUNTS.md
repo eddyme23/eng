@@ -136,8 +136,10 @@ verify list/renew/delete behavior on a live VPS after refreshing the menu.
 Existing-account actions use numbered lists. Certificate lists identify local/shared
 origin and a short identity ID when usernames repeat. Renew and private Gen export
 show locally issued accounts; shared-authorization removal shows shared identities.
-Create/import still ask for the new username. Back (0/00), invalid selections, empty
-lists and EOF do not run the selected action or require an extra pause.
+Create/import still ask for the new username. Back (0/00), invalid selections and EOF do not run the selected action or require
+an extra pause. Empty lists and loading errors remain visible until Enter is pressed.
+Renewal lists only locally issued private bundles; shared authorizations are renewed
+on their original issuing VPS and then re-imported.
 
 ## Saved proxy exports
 
