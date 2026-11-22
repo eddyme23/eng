@@ -37,8 +37,12 @@ def render(accounts):
 def sync(m, db, username):
     if modes(m).get(username) != 'certificates-only':
         return
-    ca = m.public_key((m.AUTH / 'ca.pub').read_text())
-    data = b''.join(m.entry(d, ca) for d in db['devices'] if d['username'] == username and d['status'] == 'active')
+    local = m.AUTH / 'ca.pub'
+    ca = m.public_key(local.read_text()) if local.exists() else None
+    active = [d for d in db['devices'] if d['username'] == username and d['status'] == 'active']
+    if any(not d.get('caPublicKey') and ca is None for d in active):
+        raise ValueError('Missing certificate authority for account')
+    data = b''.join(m.entry(d, d.get('caPublicKey') or ca) for d in db['devices'] if d['username'] == username and d['status'] == 'active')
     m.atomic(KEYS / username, data)
     (KEYS / username).chmod(0o644)
 

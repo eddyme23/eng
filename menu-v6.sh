@@ -214,7 +214,7 @@ ssh_menu() {
 app_cert_menu() {
   while true; do
     clear; menu_title 'APP CERTIFICATE ACCOUNTS'
-    item 1 'Create certificate account'; item 2 'Renew certificate account'; item 3 'Revoke certificate account'; item 4 'List certificate accounts'; item 5 'Export certificate for Gen'; item 6 'Import existing certificate JSON'; item 7 'Show certificate connection details'; back_item
+    item 1 'Create certificate account'; item 2 'Renew certificate account'; item 3 'Revoke certificate account'; item 4 'List certificate accounts'; item 5 'Export certificate for Gen'; item 6 'Import existing certificate JSON'; item 7 'Show certificate connection details'; item 8 'Export shared authorization for another VPS'; item 9 'Import shared authorization from file'; back_item
     read_menu_option x '  ► Option: ' || return
     case "$x" in
       1) ask_account; bash "$script_dir/certificate-accounts.sh" create "$account" "$validity"; pause ;;
@@ -224,6 +224,8 @@ app_cert_menu() {
       5) read -r -p 'Certificate account name: ' account; bash "$script_dir/app-ssh-auth.sh" bundle-export "$account"; pause ;;
       6) ask_account; bash "$script_dir/certificate-accounts.sh" import "$account" "$validity"; pause ;;
       7) read -r -p 'Certificate account name: ' account; bash "$script_dir/certificate-details.sh" "$account"; pause ;;
+      8) read -r -p 'Certificate account name: ' account; bash "$script_dir/app-ssh-auth.sh" shared-export "$account"; pause ;;
+      9) read -r -p 'Public authorization JSON file: ' shared_file; bash "$script_dir/app-ssh-auth.sh" shared-import "$shared_file"; pause ;;
       0) return ;; *) echo 'Invalid option.'; sleep 1 ;;
     esac
   done

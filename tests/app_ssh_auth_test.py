@@ -373,3 +373,82 @@ class AppSshAuthTest(unittest.TestCase):
             with self.m.authorized_file(self.user):
                 self.fail('Symlink should be rejected')
         self.assertEqual(target.read_text(), 'unchanged')
+
+    def shared_fixture(self):
+        return dict(schema=1, type='eng-shared-ssh-authorization', username='eddy',
+                    deviceId='a' * 32, publicKey=self.m.public_key((self.base / 'device-ecdsa.pub').read_text()),
+                    caPublicKey=self.public, validBefore=(self.expiry - timedelta(hours=1)).isoformat())
+
+    def test_shared_export_contains_no_private_or_udp_credentials(self):
+        with self.patches(), patch.object(self.m, 'policy_module'), patch.object(self.m, 'pin_policy', return_value={'genPolicy': {}}):
+            original = json.loads(self.m.create_bundle(self.bundle_args()).read_text())
+            shared = self.m.shared_export('eddy')
+            self.assertEqual(shared['deviceId'], original['deviceId'])
+            self.assertEqual(shared['caPublicKey'], original['caPublicKey'])
+            self.assertEqual(shared['validBefore'], original['validBefore'])
+            self.assertNotIn('privateKey', shared)
+            self.assertNotIn('udpCustom', shared)
+            self.assertNotIn('PRIVATE KEY', json.dumps(shared))
+
+    def test_shared_import_preserves_foreign_ca_and_identity_and_is_idempotent(self):
+        data = self.shared_fixture()
+        (self.auth / 'ca.pub').unlink()
+        (self.auth / 'ca').unlink()
+        with self.patches(), patch.object(self.m, 'policy_module') as policy:
+            self.m.shared_import(data, new_account=True)
+            self.m.shared_import(data)
+            record = self.m.read_db()['devices'][0]
+            self.assertEqual(len(self.m.read_db()['devices']), 1)
+            self.assertEqual(record['principal'], 'eng-app-' + data['deviceId'])
+            self.assertEqual(record['caPublicKey'], data['caPublicKey'])
+            self.assertEqual(record['validBefore'], data['validBefore'])
+            self.assertIn(b'expiry-time=', self.content)
+            self.assertIn(data['caPublicKey'].encode(), self.content)
+            self.assertIn(b'unrelated-key old-client', self.content)
+            self.assertFalse(self.m.bundle_path('eddy').exists())
+            self.m.configure_udp_password.assert_not_called()
+            self.m.authority.assert_not_called()
+            self.assertEqual(policy.return_value.set_mode.call_count, 2)
+
+    def test_shared_import_refuses_password_account_conflicts_revocation_and_expiry(self):
+        data = self.shared_fixture()
+        with self.patches(), patch.object(self.m, 'policy_module'):
+            with self.assertRaisesRegex(ValueError, 'password account'):
+                self.m.shared_import(data)
+            self.m.shared_import(data, new_account=True)
+            changed = dict(data, deviceId='b' * 32)
+            with self.assertRaisesRegex(ValueError, 'different'):
+                self.m.shared_import(changed)
+            db = self.m.read_db();db['devices'][0]['status'] = 'revoked';self.m.save_db(db)
+            with self.assertRaisesRegex(ValueError, 'revoked'):
+                self.m.shared_import(data)
+            with self.assertRaisesRegex(ValueError, 'expired'):
+                self.m.validate_shared(dict(data, validBefore='2000-01-01T00:00:00+00:00'))
+            with self.assertRaises(ValueError):
+                self.m.validate_shared(dict(data, privateKey='secret'))
+
+    def test_shared_import_policy_failure_restores_trust_and_database(self):
+        with self.patches(), patch.object(self.m, 'policy_module') as policy:
+            policy.return_value.set_mode.side_effect = ValueError('syntax failure')
+            with self.assertRaisesRegex(ValueError, 'syntax failure'):
+                self.m.shared_import(self.shared_fixture(), new_account=True)
+            self.assertEqual(self.content, self.before)
+            self.assertEqual(self.m.read_db()['devices'], [])
+
+    def test_shared_import_is_bounded_by_local_account_expiry(self):
+        with self.patches():
+            with self.assertRaisesRegex(ValueError, 'expires before'):
+                self.m.shared_import(dict(self.shared_fixture(), validBefore=(self.expiry + timedelta(days=1)).isoformat()), new_account=True)
+
+    def test_destination_bundle_export_changes_only_pin_and_not_saved_credential(self):
+        with self.patches(), patch.object(self.m, 'policy_module'), patch.object(self.m, 'pin_policy', return_value={'genPolicy': {'SSHHostKeyPin': 'original'}}):
+            path = self.m.create_bundle(self.bundle_args())
+            original = path.read_bytes()
+            pin = 'SHA256:' + 'A' * 43
+            exported = self.m.export_bundle('eddy', pin)
+            self.assertEqual(exported['genPolicy']['SSHHostKeyPin'], pin)
+            self.assertEqual(path.read_bytes(), original)
+            self.assertEqual(exported['certificate'], json.loads(original)['certificate'])
+            self.assertEqual(exported['privateKey'], json.loads(original)['privateKey'])
+            with self.assertRaisesRegex(ValueError, 'fingerprint'):
+                self.m.export_bundle('eddy', 'invalid')

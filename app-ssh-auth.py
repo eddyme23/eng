@@ -171,7 +171,7 @@ def authority():
     if private.exists() != public.exists():
         raise ValueError('Incomplete CA pair; restore its backup, do not rotate it automatically')
     if not private.exists():
-        if read_db()['devices']:
+        if any(not d.get('shared') for d in read_db()['devices']):
             raise ValueError('Existing devices but missing CA; restore the signing key backup')
         with tempfile.TemporaryDirectory(dir=AUTH) as directory:
             key = Path(directory) / 'ca'
@@ -187,7 +187,11 @@ def authority():
 
 
 def entry(record, ca):
-    return (f'cert-authority,principals="{record["principal"]}",restrict,port-forwarding,'
+    expiry = ''
+    if record.get('shared'):
+        end = datetime.fromisoformat(record['validBefore']).astimezone(timezone.utc)
+        expiry = 'expiry-time="' + end.strftime('%Y%m%d%H%M%SZ') + '",'
+    return (expiry + f'cert-authority,principals="{record["principal"]}",restrict,port-forwarding,'
             f'command="/bin/false" {ca} {MARKER}{record["id"]}\n').encode()
 
 
@@ -283,6 +287,7 @@ def enroll(args):
     transport_policy()
     ca = authority()
     record = sign_device(args.username, args.device, public, args.days, account_expiry)
+    record['caPublicKey'] = ca
     identity = record['id']
     db['devices'].append(record)
     with authorized_file(user) as (before, write):
@@ -420,6 +425,8 @@ def read_bundle(username):
     path = bundle_path(username)
     if path.is_symlink():
         raise ValueError('Unsafe bundle path')
+    if not path.exists():
+        raise ValueError('No local private bundle. Shared accounts are renewed/exported on their issuing VPS.')
     data = json.loads(path.read_text())
     matches = [d for d in read_db()['devices'] if d['username'] == username and
                d['id'] == data['deviceId'] and d['status'] == 'active']
@@ -515,6 +522,7 @@ def renew_bundle(args):
     transport_policy()
     # Preserve the key and identity so Gen can replace the credential predictably.
     record = sign_device(args.username, old['device'], old['publicKey'], args.days, expiry, old['id'])
+    record['caPublicKey'] = authority()
     db = read_db()
     previous = json.loads(json.dumps(db))
     db['devices'] = [record if d['id'] == old['id'] else d for d in db['devices']]
@@ -534,6 +542,98 @@ def renew_bundle(args):
             policy_module().sync(manager(), previous, args.username)
             raise
     return bundle_path(args.username)
+
+
+def export_bundle(username, host_pin=None):
+    account(username)
+    data, _ = read_bundle(username)
+    if datetime.fromisoformat(data['validBefore']) <= datetime.now(timezone.utc):
+        raise ValueError('Certificate expired; renew first')
+    if host_pin:
+        if not re.fullmatch(r'SHA256:[A-Za-z0-9+/]{43}', host_pin):
+            raise ValueError('Expected a verified SHA256 OpenSSH host fingerprint')
+        data['genPolicy']['SSHHostKeyPin'] = host_pin
+    return data
+
+
+def shared_export(username):
+    """Public authorization only: never export a Gen bundle to another VPS."""
+    account(username)
+    records = [d for d in read_db()['devices'] if d['username'] == username and
+               d['device'] == 'certificate-account' and d['status'] == 'active']
+    if len(records) != 1:
+        raise ValueError('Expected one active certificate account')
+    record = records[0]
+    data = dict(schema=1, type='eng-shared-ssh-authorization', username=username,
+                deviceId=record['id'], publicKey=record['publicKey'],
+                caPublicKey=record.get('caPublicKey') or authority(),
+                validBefore=record['validBefore'])
+    validate_shared(data)
+    return data
+
+
+def validate_shared(data):
+    fields = {'schema', 'type', 'username', 'deviceId', 'publicKey', 'caPublicKey', 'validBefore'}
+    if not isinstance(data, dict) or set(data) != fields or data['schema'] != 1 or data['type'] != 'eng-shared-ssh-authorization':
+        raise ValueError('Expected public ENG shared authorization JSON, not a private Gen bundle')
+    if any(not isinstance(data[key], str) for key in fields - {'schema'}):
+        raise ValueError('Shared authorization fields must be strings')
+    identifier(data['username'])
+    if not isinstance(data['deviceId'], str) or not re.fullmatch(r'[a-f0-9]{32}', data['deviceId']):
+        raise ValueError('Invalid shared certificate identity')
+    data = dict(data)
+    for key in ('publicKey', 'caPublicKey'):
+        data[key] = public_key(data[key])
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'key.pub'
+            path.write_text(data[key] + '\n')
+            run(KEYGEN, '-l', '-f', path)
+    if not data['caPublicKey'].startswith('ssh-ed25519 '):
+        raise ValueError('Expected an ENG Ed25519 certificate authority')
+    expiry = datetime.fromisoformat(data['validBefore'])
+    now = datetime.now(timezone.utc)
+    if expiry.tzinfo is None or not now < expiry <= now + timedelta(days=3651):
+        raise ValueError('Shared authorization is expired or has invalid expiry')
+    data['validBefore'] = expiry.astimezone(timezone.utc).isoformat()
+    return data
+
+
+def shared_import(data, new_account=False):
+    data = validate_shared(data)
+    username = data['username']
+    user, expiry = account(username)
+    end = datetime.fromisoformat(data['validBefore'])
+    if expiry < end:
+        raise ValueError('Local account expires before the certificate; renew its OS validity first')
+    db = read_db()
+    previous = json.loads(json.dumps(db))
+    records = [d for d in db['devices'] if d['username'] == username]
+    if records:
+        if len(records) != 1 or not records[0].get('shared') or records[0]['id'] != data['deviceId'] or records[0]['status'] != 'active':
+            raise ValueError('Refusing to replace a local, different or revoked certificate identity')
+        if records[0]['caPublicKey'] != data['caPublicKey'] or records[0]['publicKey'] != data['publicKey']:
+            raise ValueError('Shared identity key or CA changed; use a new account')
+    elif not new_account:
+        raise ValueError('Refusing to convert an existing password account; use a new account name')
+    backend_policy(user, data['publicKey'].split()[0])
+    transport_policy()
+    record = dict(id=data['deviceId'], username=username, device='certificate-account',
+                  principal='eng-app-' + data['deviceId'], status='active', shared=True,
+                  publicKey=data['publicKey'], caPublicKey=data['caPublicKey'],
+                  validAfter=datetime.now(timezone.utc).isoformat(), validBefore=data['validBefore'])
+    db['devices'] = [d for d in db['devices'] if d['username'] != username] + [record]
+    with authorized_file(user) as (before, write):
+        try:
+            write(edit_lines(before, record['id'], entry(record, record['caPublicKey'])))
+            save_db(db)
+            policy_module().set_mode(manager(), username, 'certificates-only')
+        except BaseException:
+            write(before)
+            save_db(previous)
+            policy_module().sync(manager(), previous, username)
+            raise
+    print('Shared certificate authorized:', username)
+    print('No private keys, UDP credentials or host keys imported. Revoke on each VPS separately.')
 
 
 def list_certificate_accounts():
@@ -560,6 +660,7 @@ def main():
     for action in ('bundle-create', 'bundle-import', 'bundle-renew', 'bundle-export', 'bundle-check'):
         bundle = commands.add_parser(action)
         bundle.add_argument('username')
+        bundle.add_argument('--host-pin', help='Verified destination host fingerprint; export only')
         bundle.add_argument('--days', type=int, default=30)
         bundle.add_argument('--host-key', type=Path, default=Path('/etc/ssh/ssh_host_ed25519_key.pub'))
     approve = commands.add_parser('enroll')
@@ -572,6 +673,10 @@ def main():
     cancel.add_argument('device')
     commands.add_parser('list')
     commands.add_parser('bundle-list')
+    shared = commands.add_parser('shared-export')
+    shared.add_argument('username')
+    shared = commands.add_parser('shared-import')
+    shared.add_argument('file', type=Path)
     audit = commands.add_parser('audit')
     audit.add_argument('username')
     pins = commands.add_parser('pins')
@@ -589,9 +694,27 @@ def main():
     args = parser.parse_args()
     if sys.platform != 'linux' or os.geteuid() != 0:
         parser.error('Run as root on the Linux VPS')
+    if getattr(args, 'host_pin', None) and args.action != 'bundle-export':
+        parser.error('--host-pin is only available for bundle-export')
     if args.action == 'bundle-import':
         print('Paste ENG JSON, then END on its own line. A new local certificate will be issued.', file=sys.stderr)
         args.bundle_data = read_pasted_bundle(sys.stdin)
+    if args.action == 'shared-import':
+        import pwd
+        with args.file.open('rb') as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                raise ValueError('Public authorization must be a regular JSON file')
+            raw = stream.read(16385)
+        if len(raw) > 16384:
+            raise ValueError('Oversized public authorization package')
+        args.shared_data = validate_shared(json.loads(raw))
+        name = args.shared_data['username']
+        try:
+            pwd.getpwnam(name)
+        except KeyError:
+            days = (datetime.fromisoformat(args.shared_data['validBefore']) - datetime.now(timezone.utc)).days + 2
+            run('bash', Path(__file__).with_name('ssh-accounts.sh'), 'create-certificate', name, str(days))
+            args.shared_new_account = True
     import fcntl
     os.umask(0o077)
     if AUTH.is_symlink():
@@ -617,15 +740,15 @@ def main():
         elif args.action == 'bundle-check':
             read_bundle(args.username)
         elif args.action == 'bundle-export':
-            account(args.username)
-            data, _ = read_bundle(args.username)
-            if datetime.fromisoformat(data['validBefore']) <= datetime.now(timezone.utc):
-                raise ValueError('Certificate expired; renew first')
-            print(json.dumps(data, indent=2))
+            print(json.dumps(export_bundle(args.username, args.host_pin), indent=2))
         elif args.action == 'enroll':
             print(json.dumps(enroll(args), indent=2))
         elif args.action == 'revoke':
             revoke(args)
+        elif args.action == 'shared-export':
+            print(json.dumps(shared_export(args.username), indent=2))
+        elif args.action == 'shared-import':
+            shared_import(args.shared_data, getattr(args, 'shared_new_account', False))
         elif args.action == 'bundle-list':
             list_certificate_accounts()
         elif args.action == 'list':

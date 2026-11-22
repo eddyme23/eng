@@ -106,3 +106,7 @@ can use that account in a compatible client. This is not app attestation or a
 restriction exclusive to one APK. Existing device-generated certificate mode is
 retained separately. Test real login, browsing and reconnects on each transport
 before distributing production configurations.
+
+## Sharing an original certificate across VPS servers
+
+Use menu 08/09 or `shared-export` / `shared-import`, not the existing private-bundle import. See [Shared certificate accounts](SHARED-CERTIFICATE-ACCOUNTS.md) for A/B/C setup, per-destination host pins and coordinated renewal/revocation.

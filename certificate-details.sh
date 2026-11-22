@@ -4,7 +4,14 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 state_dir="${V6_STATE_DIR:-/etc/frimps-v6}"
 account="${1:-}"
-bash "$script_dir/app-ssh-auth.sh" bundle-check "$account"
+shared=false
+bundle="/etc/frimps-app-auth/bundle-$account.json"
+if ! bash "$script_dir/app-ssh-auth.sh" bundle-check "$account" 2>/dev/null; then
+  bundle="$(mktemp)"
+  trap 'rm -f -- "$bundle"' EXIT
+  bash "$script_dir/app-ssh-auth.sh" shared-export "$account" > "$bundle"
+  shared=true
+fi
 valid_ipv4() {
   local value="$1" IFS=. octet
   read -r -a octets <<<"$value"
@@ -22,7 +29,6 @@ slowdns_public_ipv4() {
   printf 'Not detected'
 }
 
-bundle="/etc/frimps-app-auth/bundle-$account.json"
 domain="$(jq -r '.primaryDomain // empty' "$state_dir/routes.json")"
 ipv4="$(slowdns_public_ipv4)"
 expiry="$(jq -r .validBefore "$bundle")"
@@ -31,7 +37,7 @@ printf '  Domain/Host: %s\n  IPv4       : %s\n  Account    : %s\n  Auth       : 
 printf '  SSH        : 22\n  SSL Direct : 443\n  SSL/WS     : 443\n  WebSocket  : 80, 8080, 8880, 2082, 2086\n'
 if jq -e '.udpCustom.password | type == "string" and length > 0' "$bundle" >/dev/null; then
   printf '  UDP Custom : 50001-65535 (UDP; generated credential included privately in Gen JSON)\n'
-else
+elif [[ $shared != true ]]; then
   printf '  UDP Custom : renew this certificate account to provision its private UDP credential\n'
 fi
 if [[ -s "$state_dir/bhttp.env" ]]; then

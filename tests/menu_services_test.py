@@ -38,7 +38,7 @@ class MenuServicesTest(unittest.TestCase):
                     self.assertNotIn("Invalid option", result.stdout)
                     self.assertIn("RETURNED", result.stdout)
 
-    def test_certificate_menu_dispatches_all_five_handlers_and_returns_after_failure(self):
+    def test_certificate_menu_dispatches_all_handlers_and_returns_after_failure(self):
         cases = [
             ('01\ncustomer1\n30\n00\n', 'certificate-accounts.sh create customer1 30'),
             ('02\ncustomer1\n30\n00\n', 'certificate-accounts.sh renew customer1 30'),
@@ -47,6 +47,8 @@ class MenuServicesTest(unittest.TestCase):
             ('05\ncustomer1\n00\n', 'app-ssh-auth.sh bundle-export customer1'),
             ('06\ncustomer1\n30\n00\n', 'certificate-accounts.sh import customer1 30'),
             ('07\ncustomer1\n00\n', 'certificate-details.sh customer1'),
+            ('08\ncustomer1\n00\n', 'app-ssh-auth.sh shared-export customer1'),
+            ('09\n/root/customer1-public.json\n00\n', 'app-ssh-auth.sh shared-import /root/customer1-public.json'),
         ]
         for data, expected in cases:
             for exit_code in (0, 1):

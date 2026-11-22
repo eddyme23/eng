@@ -123,3 +123,17 @@ class AppSshPolicyTest(unittest.TestCase):
         self.assertEqual(self.p.modes(self.m), {'otherapp': 'certificates-only'})
         self.assertIn('Match User otherapp\n', self.p.POLICY.read_text())
         self.assertNotIn('appuser', self.p.POLICY.read_text())
+
+    def test_foreign_shared_ca_survives_sync_without_local_signing_ca(self):
+        ca = (self.m.AUTH / 'ca.pub').read_text()
+        (self.m.AUTH / 'ca.pub').unlink()
+        self.device.update(shared=True, caPublicKey=ca)
+        self.m.save_db({'version': 1, 'devices': [self.device]})
+        self.p.set_mode(self.m, 'appuser', 'certificates-only')
+        text = (self.p.KEYS / 'appuser').read_text()
+        self.assertIn(ca, text)
+        self.assertIn('expiry-time=', text)
+        self.device['status'] = 'revoked'
+        self.m.save_db({'version': 1, 'devices': [self.device]})
+        self.p.sync(self.m, self.m.read_db(), 'appuser')
+        self.assertEqual((self.p.KEYS / 'appuser').read_text(), '')
