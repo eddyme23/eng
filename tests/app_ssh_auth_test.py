@@ -656,3 +656,25 @@ class AppSshAuthTest(unittest.TestCase):
             self.assertTrue(all(r['status'] == 'revoked' for r in self.m.read_db()['devices']))
             third = json.loads(self.m.create_bundle(args).read_text())
             self.assertNotIn(third['deviceId'], [original['deviceId'], replacement['deviceId']])
+
+    def test_combined_export_approves_direct_and_proxy_without_changing_account(self):
+        direct = self.m.fingerprint(self.m.public_key((self.base / 'device.pub').read_text()))
+        with self.patches(), patch.object(self.m, 'policy_module'), patch.object(self.m, 'pin_policy', return_value={'genPolicy': {'SSHHostKeyPin': direct}}):
+            path = self.m.create_bundle(self.bundle_args())
+            before = path.read_bytes()
+            with self.assertRaisesRegex(ValueError, 'No saved proxy'):
+                self.m.export_bundle('eddy', combined=True)
+            proxy = self.proxy_fixture();self.m.save_proxy(proxy)
+            combined = self.m.export_bundle('eddy', combined=True)
+            self.assertEqual(combined['schema'], 2)
+            self.assertEqual(combined['genPolicy']['SSHHostKeyPin'], direct)
+            self.assertEqual(combined['genPolicy']['SSHHostKeyPins'], [direct, proxy['sshHostKeyPin']])
+            self.assertEqual(path.read_bytes(), before)
+            for field in ('privateKey','certificate','username','deviceId','caPublicKey'):
+                self.assertEqual(combined[field], json.loads(before)[field])
+            for options in ({}, {'use_proxy':True}):
+                legacy = self.m.export_bundle('eddy', **options)
+                self.assertEqual(legacy['schema'], 1)
+                self.assertNotIn('SSHHostKeyPins', legacy['genPolicy'])
+            with self.assertRaisesRegex(ValueError, 'not more than one'):
+                self.m.export_bundle('eddy', use_proxy=True, combined=True)

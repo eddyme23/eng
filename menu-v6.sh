@@ -89,11 +89,13 @@ choose_certificate_export_target() {
   menu_title 'CERTIFICATE EXPORT TARGET'
   item 1 'Direct: this VPS'
   item 2 "Saved proxy: $(jq -r .ipv4 <<<"$proxy")"
+  item 3 'Direct + saved proxy (requires updated app and Gen)'
   back_item
   read_menu_option target '  ► Export target: ' || return 1
   case "$target" in
     1) return 0 ;;
     2) export_flags=(--proxy); return 0 ;;
+    3) export_flags=(--combined); return 0 ;;
     0) return 1 ;;
     *) echo 'Invalid selection. Returning to account menu.'; return 1 ;;
   esac

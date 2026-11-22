@@ -155,3 +155,7 @@ fresh key and identity; it never restores the old certificate. Export the new Ge
 bundle and re-share its public authorization where needed. If an earlier failed
 creation left an incomplete Linux account, remove it with certificate menu 11,
 then create again. Do not remove revoked database records manually.
+
+For one bundle usable directly and through the saved proxy, choose export target
+03. This schema-2 format requires the updated app and Gen; see
+[Combined host pins](MULTI-HOST-CERTIFICATES.md).

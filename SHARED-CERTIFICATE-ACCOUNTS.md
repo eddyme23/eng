@@ -108,6 +108,7 @@ Choose **05** on B/C, select the account, then select:
 
 - **01 Direct:** keep the issuing VPS's host pin.
 - **02 Saved proxy:** export the same account using saved A's host pin.
+- **03 Direct + saved proxy:** approve both keys in one schema-2 bundle for updated apps/Gens.
 
 No saved proxy means option 05 keeps its existing direct-export behavior. Gen and
 the app need no new bundle format or app code: only the existing SSHHostKeyPin
@@ -156,9 +157,8 @@ bash ./app-ssh-auth.sh bundle-export ACCOUNT --host-pin 'SHA256:VERIFIED_DESTINA
 This changes only the exported copy's host pin, not its user certificate or stored
 bundle. Use A's pin if A terminates SSH, B's if A forwards to B, and C's if it forwards
 to C. Verify the actual backend's configured host key if customized. Do not disable
-host verification or copy server private host keys. One unmodified bundle cannot
-pin several different host keys in the current app; multiple-pin support would
-require a separate app/Gen change. Endpoint and DNS settings remain per server.
+host verification or copy server private host keys. For one bundle that works with both keys, use export target 03 and the updated
+app/Gen builds. See [Combined host pins](MULTI-HOST-CERTIFICATES.md). Endpoint and DNS settings remain per server.
 
 ## Renewal and revocation
 

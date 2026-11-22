@@ -115,7 +115,7 @@ class MenuServicesTest(unittest.TestCase):
         prefix = ('set -u\nRED= GREEN= YELLOW= BLUE= CYAN= WHITE= BOLD= NC=\n' + self.menu_functions() + '\n' + jq_function + 'script_dir=/fixture; ')
         body = 'if choose_certificate_export_target; then printf "TARGET:%s" "${export_flags[*]}"; else echo CANCELLED; fi'
         code = prefix + 'bash() { printf "%s" ' + shlex.quote(proxy) + '; }; ' + body
-        for choice, expected in [('01\n','TARGET:'), ('02\n','TARGET:--proxy'), ('00\n','CANCELLED'), ('99\n','CANCELLED'), ('','CANCELLED')]:
+        for choice, expected in [('01\n','TARGET:'), ('02\n','TARGET:--proxy'), ('03\n','TARGET:--combined'), ('00\n','CANCELLED'), ('99\n','CANCELLED'), ('','CANCELLED')]:
             result = self.run_shell(code, choice)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn(expected, result.stdout)
