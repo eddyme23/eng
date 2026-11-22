@@ -48,14 +48,13 @@ class MenuServicesTest(unittest.TestCase):
             ('03\n01\n00\n', 'app-ssh-auth.sh revoke customer1 certificate-account --identity ' + 'a' * 32),
             ('04\n00\n', 'app-ssh-auth.sh bundle-list'),
             ('05\n01\n00\n', 'app-ssh-auth.sh bundle-export customer1'),
-            ('06\ncustomer1\n30\n00\n', 'certificate-accounts.sh import customer1 30'),
-            ('07\n01\n00\n', 'certificate-details.sh customer1'),
-            ('08\n01\n00\n', 'app-ssh-auth.sh shared-export customer1 --identity ' + 'a' * 32),
-            ('09\n00\n', 'app-ssh-auth.sh shared-import --paste'),
-            ('10\n01\n00\n', 'app-ssh-auth.sh revoke customer1 certificate-account --identity ' + 'a' * 32),
-            ('11\n01\ny\n00\n', 'ssh-accounts.sh delete-certificate customer1'),
-            ('12\n00\n', 'app-ssh-auth.sh proxy-export'),
-            ('13\n00\n', 'app-ssh-auth.sh proxy-save'),
+            ('06\n01\n00\n', 'certificate-details.sh customer1'),
+            ('07\n01\n00\n', 'app-ssh-auth.sh shared-export customer1 --identity ' + 'a' * 32),
+            ('08\n00\n', 'app-ssh-auth.sh shared-import --paste'),
+            ('09\n01\n00\n', 'app-ssh-auth.sh revoke customer1 certificate-account --identity ' + 'a' * 32),
+            ('10\n01\ny\n00\n', 'ssh-accounts.sh delete-certificate customer1'),
+            ('11\n00\n', 'app-ssh-auth.sh proxy-export'),
+            ('12\n00\n', 'app-ssh-auth.sh proxy-save'),
         ]
         for data, expected in cases:
             for exit_code in (0, 1):
@@ -72,6 +71,15 @@ class MenuServicesTest(unittest.TestCase):
                     self.assertIn('CALL /fixture/' + expected, result.stdout)
                     self.assertIn('RETURNED', result.stdout)
                     self.assertNotIn('Invalid option', result.stdout)
+
+    def test_private_import_is_not_in_certificate_menu(self):
+        code = ('set -u\nRED= GREEN= YELLOW= BLUE= CYAN= WHITE= BOLD= NC=\n' + self.menu_functions()
+                + '\nclear() { :; }; app_cert_menu')
+        result = self.run_shell(code, '00\n')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn('Import existing certificate JSON', result.stdout)
+        self.assertIn('[06] Show certificate connection details', result.stdout)
+        self.assertEqual(len(re.findall(r'^  \[\d{2}\]', result.stdout, re.M)), 13)
 
     @unittest.skipUnless(JQ, 'jq required')
     def test_numbered_picker_accepts_padded_choice_and_cancels_safely(self):
@@ -95,7 +103,7 @@ class MenuServicesTest(unittest.TestCase):
     def test_certificate_picker_cancellation_never_calls_handler_or_pause(self):
         rows = json.dumps([dict(account='eddy',identity='b'*32,local=False,label='eddy | shared')])
         jq_function = 'jq() { ' + shlex.quote(Path(JQ).as_posix()) + ' "$@" | tr -d \'\\r\'; };\n'
-        for option in ('2','3','5','7','8','10'):
+        for option in ('2','3','5','6','7','9'):
             for selection in ('0','00','99','bad'):
                 code = ('set -u\nRED= GREEN= YELLOW= BLUE= CYAN= WHITE= BOLD= NC=\n' + self.menu_functions() + '\n' + jq_function
                     + 'script_dir=/fixture; clear() { :; }; pause() { echo PAUSED; }; '

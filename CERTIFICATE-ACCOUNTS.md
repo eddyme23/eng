@@ -40,8 +40,8 @@ Older renewed certificates remain valid until expiry or account revocation.
 
 ## App / Gen handoff
 
-The menu also offers **Import existing certificate JSON** and **Show certificate
-connection details**. Create/renew/import print the applicable endpoint details,
+The menu offers **Show certificate connection details**. Private bundle import
+is available through the recovery command only. Create/renew/import print the applicable endpoint details,
 payloads and DNSTT nameserver/key without printing private credentials.
 
 For import, choose a NEW account name and validity, paste the complete ENG JSON,
@@ -109,7 +109,7 @@ before distributing production configurations.
 
 ## Sharing an original certificate across VPS servers
 
-Use menu 08/09 or `shared-export` / `shared-import`, not the existing private-bundle import. See [Shared certificate accounts](SHARED-CERTIFICATE-ACCOUNTS.md) for A/B/C setup, per-destination host pins and coordinated renewal/revocation.
+Use menu 7/09 or `shared-export` / `shared-import`, not the existing private-bundle import. See [Shared certificate accounts](SHARED-CERTIFICATE-ACCOUNTS.md) for A/B/C setup, per-destination host pins and coordinated renewal/revocation.
 
 ## Separate account management
 
@@ -120,7 +120,7 @@ Existing certificate accounts are recognized from their identity database, priva
 bundle or certificate-only policy without recreating them. New accounts carry an
 explicit accountType marker, including incomplete certificate setup.
 
-Certificate menu 11 explicitly deletes a certificate account and ALL its local and
+Certificate menu 10 explicitly deletes a certificate account and ALL its local and
 shared identities on this VPS after confirmation. Revocation (03/10) removes the
 selected credential without deleting the Linux account. Deletion does not remove
 copies on another VPS. Use `ssh-accounts.sh list-certificate` to list managed Linux
@@ -143,19 +143,24 @@ on their original issuing VPS and then re-imported.
 
 ## Automatic proxy approvals
 
-Option 12 shows this VPS's public proxy IP/key/fingerprint JSON without needing
-an account. Option 13 pastes and saves it on another VPS. Option 05 always exports
+Option 11 shows this VPS's public proxy IP/key/fingerprint JSON without needing
+an account. Option 12 pastes and saves it on another VPS. Option 05 always exports
 the new schema-2 bundle, approving the local host and the saved proxy automatically.
 No target selection or manual host-pin flags remain. Public account authorization
-(08/09) is still required on the proxy. The updated apps/Gens support this format.
+(07/08) is still required on the proxy. The updated apps/Gens support this format.
 See [Shared certificate accounts](SHARED-CERTIFICATE-ACCOUNTS.md).
 
 After deleting a certificate account, its username can be used again for a new
 certificate account. ENG retains the old revoked identity as history and issues a
 fresh key and identity; it never restores the old certificate. Export the new Gen
 bundle and re-share its public authorization where needed. If an earlier failed
-creation left an incomplete Linux account, remove it with certificate menu 11,
+creation left an incomplete Linux account, remove it with certificate menu 10,
 then create again. Do not remove revoked database records manually.
 
 Fresh installs and renewals issue schema-2 private bundles. Standard export also
 upgrades older stored bundles without changing their credentials.
+
+Private certificate import is no longer a menu option. For operator recovery only,
+use `bash ./certificate-accounts.sh import USERNAME DAYS`. Menu numbers after the
+removed entry were shifted down: sharing export/paste are 07/08, whole-account
+deletion is 10, and proxy details/show-save are 11/12.

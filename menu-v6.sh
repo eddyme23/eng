@@ -260,7 +260,7 @@ ssh_menu() {
 app_cert_menu() {
   while true; do
     clear; menu_title 'APP CERTIFICATE ACCOUNTS'
-    item 1 'Create certificate account'; item 2 'Renew certificate account'; item 3 'Revoke certificate account'; item 4 'List certificate accounts'; item 5 'Export certificate for Gen'; item 6 'Import existing certificate JSON'; item 7 'Show certificate connection details'; item 8 'Export shared authorization for another VPS'; item 9 'Paste shared authorization JSON'; item 10 'Revoke one shared certificate identity'; item 11 'Delete certificate account and all its identities'; item 12 'Show this VPS proxy details (public JSON)'; item 13 'Save proxy details (paste public JSON)'; back_item
+    item 1 'Create certificate account'; item 2 'Renew certificate account'; item 3 'Revoke certificate account'; item 4 'List certificate accounts'; item 5 'Export certificate for Gen'; item 6 'Show certificate connection details'; item 7 'Export shared authorization for another VPS'; item 8 'Paste shared authorization JSON'; item 9 'Revoke one shared certificate identity'; item 10 'Delete certificate account and all its identities'; item 11 'Show this VPS proxy details (public JSON)'; item 12 'Save proxy details (paste public JSON)'; back_item
     read_menu_option x '  ► Option: ' || return
     case "$x" in
       1) ask_account; bash "$script_dir/certificate-accounts.sh" create "$account" "$validity"; pause ;;
@@ -268,14 +268,13 @@ app_cert_menu() {
       3) if pick_certificate revoke; then bash "$script_dir/app-ssh-auth.sh" revoke "$account" certificate-account --identity "$identity"; pause; fi ;;
       4) bash "$script_dir/app-ssh-auth.sh" bundle-list; pause ;;
       5) if pick_certificate gen; then bash "$script_dir/app-ssh-auth.sh" bundle-export "$account"; pause; fi ;;
-      6) ask_account; bash "$script_dir/certificate-accounts.sh" import "$account" "$validity"; pause ;;
-      7) if pick_certificate details; then if [[ $selected_local == true ]]; then bash "$script_dir/certificate-details.sh" "$account"; else bash "$script_dir/certificate-details.sh" "$account" "$identity"; fi; pause; fi ;;
-      8) if pick_certificate share; then bash "$script_dir/app-ssh-auth.sh" shared-export "$account" --identity "$identity"; pause; fi ;;
-      9) bash "$script_dir/app-ssh-auth.sh" shared-import --paste; pause ;;
-      10) if pick_certificate shared-revoke; then bash "$script_dir/app-ssh-auth.sh" revoke "$account" certificate-account --identity "$identity"; pause; fi ;;
-      11) if pick_ssh_account certificate; then read -r -p 'Delete this certificate account and ALL its identities on this VPS? [y/N] ' confirm; [[ $confirm =~ ^[Yy]$ ]] && bash "$script_dir/ssh-accounts.sh" delete-certificate "$account"; pause; fi ;;
-      12) bash "$script_dir/app-ssh-auth.sh" proxy-export; pause ;;
-      13) bash "$script_dir/app-ssh-auth.sh" proxy-save; pause ;;
+      6) if pick_certificate details; then if [[ $selected_local == true ]]; then bash "$script_dir/certificate-details.sh" "$account"; else bash "$script_dir/certificate-details.sh" "$account" "$identity"; fi; pause; fi ;;
+      7) if pick_certificate share; then bash "$script_dir/app-ssh-auth.sh" shared-export "$account" --identity "$identity"; pause; fi ;;
+      8) bash "$script_dir/app-ssh-auth.sh" shared-import --paste; pause ;;
+      9) if pick_certificate shared-revoke; then bash "$script_dir/app-ssh-auth.sh" revoke "$account" certificate-account --identity "$identity"; pause; fi ;;
+      10) if pick_ssh_account certificate; then read -r -p 'Delete this certificate account and ALL its identities on this VPS? [y/N] ' confirm; [[ $confirm =~ ^[Yy]$ ]] && bash "$script_dir/ssh-accounts.sh" delete-certificate "$account"; pause; fi ;;
+      11) bash "$script_dir/app-ssh-auth.sh" proxy-export; pause ;;
+      12) bash "$script_dir/app-ssh-auth.sh" proxy-save; pause ;;
       0) return ;; *) echo 'Invalid option.'; sleep 1 ;;
     esac
   done
