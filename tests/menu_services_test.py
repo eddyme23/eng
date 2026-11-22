@@ -1,4 +1,6 @@
 import os
+import json
+import shlex
 import re
 import shutil
 import subprocess
@@ -8,6 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BASH = r"C:/Program Files/Git/bin/bash.exe" if os.name == "nt" else shutil.which("bash")
+JQ = shutil.which("jq") or (str(ROOT.parent / "test-bin/jq.exe") if (ROOT.parent / "test-bin/jq.exe").exists() else None)
 
 @unittest.skipUnless(BASH, "bash required")
 class MenuServicesTest(unittest.TestCase):
@@ -41,16 +44,16 @@ class MenuServicesTest(unittest.TestCase):
     def test_certificate_menu_dispatches_all_handlers_and_returns_after_failure(self):
         cases = [
             ('01\ncustomer1\n30\n00\n', 'certificate-accounts.sh create customer1 30'),
-            ('02\ncustomer1\n30\n00\n', 'certificate-accounts.sh renew customer1 30'),
-            ('03\ncustomer1\n00\n', 'app-ssh-auth.sh revoke customer1 certificate-account'),
+            ('02\n01\n30\n00\n', 'certificate-accounts.sh renew customer1 30'),
+            ('03\n01\n00\n', 'app-ssh-auth.sh revoke customer1 certificate-account --identity ' + 'a' * 32),
             ('04\n00\n', 'app-ssh-auth.sh bundle-list'),
-            ('05\ncustomer1\n00\n', 'app-ssh-auth.sh bundle-export customer1'),
+            ('05\n01\n00\n', 'app-ssh-auth.sh bundle-export customer1'),
             ('06\ncustomer1\n30\n00\n', 'certificate-accounts.sh import customer1 30'),
-            ('07\ncustomer1\n00\n', 'certificate-details.sh customer1'),
-            ('08\ncustomer1\n00\n', 'app-ssh-auth.sh shared-export customer1'),
+            ('07\n01\n00\n', 'certificate-details.sh customer1'),
+            ('08\n01\n00\n', 'app-ssh-auth.sh shared-export customer1 --identity ' + 'a' * 32),
             ('09\n00\n', 'app-ssh-auth.sh shared-import --paste'),
-            ('10\ncustomer1\n' + 'a' * 32 + '\n00\n', 'app-ssh-auth.sh revoke customer1 certificate-account --identity ' + 'a' * 32),
-            ('11\n00\n', 'ssh-accounts.sh choose-delete-certificate'),
+            ('10\n01\n00\n', 'app-ssh-auth.sh revoke customer1 certificate-account --identity ' + 'a' * 32),
+            ('11\n01\ny\n00\n', 'ssh-accounts.sh delete-certificate customer1'),
         ]
         for data, expected in cases:
             for exit_code in (0, 1):
@@ -58,6 +61,8 @@ class MenuServicesTest(unittest.TestCase):
                     code = ('set -u\nRED= GREEN= YELLOW= BLUE= CYAN= WHITE= BOLD= NC=\n'
                             + self.menu_functions()
                             + '\nscript_dir=/fixture; clear() { :; }; pause() { :; }; '
+                            + 'pick_certificate() { read -r selection; account=customer1; identity=' + 'a' * 32 + '; selected_local=true; }; '
+                            + 'pick_ssh_account() { read -r selection; account=customer1; }; '
                             + 'bash() { printf "CALL %s\\n" "$*"; return ' + str(exit_code) + '; }; '
                             + 'app_cert_menu; echo RETURNED')
                     result = self.run_shell(code, data)
@@ -65,6 +70,40 @@ class MenuServicesTest(unittest.TestCase):
                     self.assertIn('CALL /fixture/' + expected, result.stdout)
                     self.assertIn('RETURNED', result.stdout)
                     self.assertNotIn('Invalid option', result.stdout)
+
+    @unittest.skipUnless(JQ, 'jq required')
+    def test_numbered_picker_accepts_padded_choice_and_cancels_safely(self):
+        rows = [dict(account='eddy',identity='a'*32,local=True,label='eddy | local'),
+                dict(account='eddy',identity='b'*32,local=False,label='eddy | shared')]
+        jq_function = 'jq() { ' + shlex.quote(Path(JQ).as_posix()) + ' "$@" | tr -d \'\\r\'; };\n'
+        code = ('set -u\nRED= GREEN= YELLOW= BLUE= CYAN= WHITE= BOLD= NC=\n' + self.menu_functions() + '\n' + jq_function
+                + 'if pick_account_rows ' + shlex.quote(json.dumps(rows)) + ' Certificate; then printf "SELECTED %s %s %s" "$account" "$identity" "$selected_local"; else echo CANCELLED; fi')
+        result = self.run_shell(code, '02\n')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('SELECTED eddy ' + 'b'*32 + ' false', result.stdout)
+        for data in ('0\n','00\n','99\n','bad\n','999999999999999\n',''):
+            result = self.run_shell(code, data)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('CANCELLED', result.stdout)
+            self.assertNotIn('SELECTED eddy', result.stdout)
+        empty = self.run_shell(code.replace(shlex.quote(json.dumps(rows)), "'[]'"), '1\n')
+        self.assertIn('No Certificate accounts available', empty.stdout)
+
+    @unittest.skipUnless(JQ, 'jq required')
+    def test_certificate_picker_cancellation_never_calls_handler_or_pause(self):
+        rows = json.dumps([dict(account='eddy',identity='b'*32,local=False,label='eddy | shared')])
+        jq_function = 'jq() { ' + shlex.quote(Path(JQ).as_posix()) + ' "$@" | tr -d \'\\r\'; };\n'
+        for option in ('2','3','5','7','8','10'):
+            for selection in ('0','00','99','bad'):
+                code = ('set -u\nRED= GREEN= YELLOW= BLUE= CYAN= WHITE= BOLD= NC=\n' + self.menu_functions() + '\n' + jq_function
+                    + 'script_dir=/fixture; clear() { :; }; pause() { echo PAUSED; }; '
+                    + 'bash() { if [[ $2 == choices ]]; then printf "%s" ' + shlex.quote(rows)
+                    + '; else echo MUTATION; fi; }; app_cert_menu; echo RETURNED')
+                result = self.run_shell(code, option + '\n' + selection + '\n00\n')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn('RETURNED', result.stdout)
+                self.assertNotIn('MUTATION', result.stdout)
+                self.assertNotIn('PAUSED', result.stdout)
 
     def test_certificate_details_prints_endpoints_without_private_credentials(self):
         with tempfile.TemporaryDirectory() as directory:

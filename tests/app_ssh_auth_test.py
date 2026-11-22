@@ -537,3 +537,29 @@ class AppSshAuthTest(unittest.TestCase):
                     self.m.read_shared_authorization(stream=StringIO(text))
         self.assertFalse((self.auth / 'devices.json').exists())
         self.assertEqual(self.content, self.before)
+
+    def test_certificate_choices_filter_modes_and_keep_same_username_identities(self):
+        with self.patches(), patch.object(self.m, 'policy_module'), patch.object(self.m, 'pin_policy', return_value={'genPolicy': {}}):
+            self.m.STATE = self.auth
+            (self.auth / 'ssh-users.json').write_text('[{"name":"eddy","expiresAt":"2030-01-01"}]')
+            self.m.create_bundle(self.bundle_args())
+            local = self.m.shared_export('eddy')
+            self.m.shared_import(self.shared_fixture())
+            for mode in ('renew', 'gen', 'revoke'):
+                choices = self.m.certificate_choices(mode)
+                self.assertEqual(len(choices), 1)
+                self.assertEqual(choices[0]['identity'], local['deviceId'])
+                self.assertTrue(choices[0]['local'])
+            self.assertEqual(len(self.m.certificate_choices('details')), 2)
+            self.assertEqual(len(self.m.certificate_choices('share')), 2)
+            shared = self.m.certificate_choices('shared-revoke')
+            self.assertEqual(len(shared), 1)
+            self.assertEqual(shared[0]['identity'], 'a'*32)
+            self.assertFalse(shared[0]['local'])
+            self.assertNotIn('privateKey', json.dumps(shared))
+            self.assertNotIn('udpCustom', json.dumps(shared))
+            self.assertEqual(self.m.certificate_info('eddy', 'a'*32)['deviceId'], 'a'*32)
+            db = self.m.read_db();db['devices'][1]['status'] = 'revoked';self.m.save_db(db)
+            self.assertEqual(self.m.certificate_choices('shared-revoke'), [])
+            with self.assertRaisesRegex(ValueError, 'not found'):
+                self.m.certificate_info('eddy', 'a'*32)

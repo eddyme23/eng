@@ -132,3 +132,9 @@ private certificate key is automatically restored by this update.
 Separation tests use the real classifier, shell dispatch and jq against temporary
 stores. Linux user operations, permissions and locking are mocked on Windows;
 verify list/renew/delete behavior on a live VPS after refreshing the menu.
+
+Existing-account actions use numbered lists. Certificate lists identify local/shared
+origin and a short identity ID when usernames repeat. Renew and private Gen export
+show locally issued accounts; shared-authorization removal shows shared identities.
+Create/import still ask for the new username. Back (0/00), invalid selections, empty
+lists and EOF do not run the selected action or require an extra pause.

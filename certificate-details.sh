@@ -4,12 +4,17 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 state_dir="${V6_STATE_DIR:-/etc/frimps-v6}"
 account="${1:-}"
+identity="${2:-}"
 shared=false
 bundle="/etc/frimps-app-auth/bundle-$account.json"
-if ! bash "$script_dir/app-ssh-auth.sh" bundle-check "$account" 2>/dev/null; then
+if [[ -n $identity ]] || ! bash "$script_dir/app-ssh-auth.sh" bundle-check "$account" 2>/dev/null; then
   bundle="$(mktemp)"
   trap 'rm -f -- "$bundle"' EXIT
-  bash "$script_dir/app-ssh-auth.sh" shared-export "$account" > "$bundle"
+  if [[ -n $identity ]]; then
+    bash "$script_dir/app-ssh-auth.sh" certificate-info "$account" "$identity" > "$bundle"
+  else
+    bash "$script_dir/app-ssh-auth.sh" shared-export "$account" > "$bundle"
+  fi
   shared=true
 fi
 valid_ipv4() {
@@ -62,5 +67,9 @@ printf '  SlowDNS/DNSTT: %s:53 (UDP)\n  Tunnel NS  : %s\n' "$ipv4" "$slowdns_ns"
 if [[ -r /etc/slowdns/server.pub ]]; then printf '  DNS PUB KEY: %s\n' "$(cat /etc/slowdns/server.pub)"; fi
 printf '\n  Payload HTTP:\n  GET / HTTP/1.1[crlf]Host: %s[crlf]Connection: Upgrade[crlf]Upgrade: websocket[crlf][crlf]\n' "$domain"
 printf '\n  Payload Enhanced:\n  GET / HTTP/1.1[crlf]Host: bug.com[crlf][crlf]PATCH / HTTP/1.1[crlf]Host: %s[crlf]Connection: Upgrade[crlf]Upgrade: websocket[crlf][crlf]\n' "$domain"
-printf '\n  Export JSON: bash %s/app-ssh-auth.sh bundle-export %s\n' "$script_dir" "$account"
+if [[ $shared == true ]]; then
+  printf '\n  Export private Gen JSON on the original issuing VPS.\n'
+else
+  printf '\n  Export JSON: bash %s/app-ssh-auth.sh bundle-export %s\n' "$script_dir" "$account"
+fi
 printf '  Listed endpoints reflect configuration; test service availability and client browsing.\n'

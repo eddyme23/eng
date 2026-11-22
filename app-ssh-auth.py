@@ -698,6 +698,36 @@ def list_certificate_accounts():
         print(*row, sep='\t')
 
 
+def certificate_choices(mode):
+    managed = {row['name'] for row in json.loads((STATE / 'ssh-users.json').read_text())}
+    now = datetime.now(timezone.utc)
+    rows = []
+    for record in read_db()['devices']:
+        if record['username'] not in managed or record['device'] != 'certificate-account' or record['status'] != 'active':
+            continue
+        local = not record.get('shared')
+        if mode in ('renew', 'gen', 'revoke') and not local:
+            continue
+        if mode in ('renew', 'gen') and not bundle_path(record['username']).is_file():
+            continue
+        if mode == 'shared-revoke' and local:
+            continue
+        if mode in ('gen', 'share') and datetime.fromisoformat(record['validBefore']) <= now:
+            continue
+        label = (record['username'] + ' | ' + ('local' if local else 'shared') + ' | ' +
+                 record['id'][:12] + ' | expires ' + record['validBefore'][:10])
+        rows.append(dict(account=record['username'], identity=record['id'], local=local, label=label))
+    return sorted(rows, key=lambda row: (row['account'], not row['local'], row['identity']))
+
+
+def certificate_info(username, identity):
+    records = [d for d in read_db()['devices'] if d['username'] == username and
+               d['id'] == identity and d['status'] == 'active' and d['device'] == 'certificate-account']
+    if len(records) != 1:
+        raise ValueError('Active certificate identity not found')
+    return dict(username=username, deviceId=identity, validBefore=records[0]['validBefore'])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='action', required=True)
@@ -718,6 +748,11 @@ def main():
     cancel.add_argument('--identity', help='Revoke only this identity; otherwise prefer the local certificate')
     commands.add_parser('list')
     commands.add_parser('bundle-list')
+    choices = commands.add_parser('choices')
+    choices.add_argument('mode', choices=('renew', 'revoke', 'gen', 'details', 'share', 'shared-revoke'))
+    info = commands.add_parser('certificate-info')
+    info.add_argument('username')
+    info.add_argument('identity')
     shared = commands.add_parser('shared-export')
     shared.add_argument('username')
     shared.add_argument('--identity', help='Export this identity; otherwise prefer the local certificate')
@@ -794,6 +829,10 @@ def main():
             print(json.dumps(shared_export(args.username, args.identity), indent=2))
         elif args.action == 'shared-import':
             shared_import(args.shared_data, getattr(args, 'shared_new_account', False))
+        elif args.action == 'choices':
+            print(json.dumps(certificate_choices(args.mode)))
+        elif args.action == 'certificate-info':
+            print(json.dumps(certificate_info(args.username, args.identity)))
         elif args.action == 'bundle-list':
             list_certificate_accounts()
         elif args.action == 'list':

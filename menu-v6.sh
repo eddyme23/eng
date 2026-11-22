@@ -34,7 +34,38 @@ ask_account() { read -r -p 'Username: ' account; read -r -p 'Validity (days): ' 
 primary_domain() { jq -r '.primaryDomain' "$state_dir/routes.json"; }
 load_service_options() { [[ -r "$state_dir/service-options.env" ]] && source "$state_dir/service-options.env"; }
 load_runtime() { [[ -r "$state_dir/runtime.env" ]] && source "$state_dir/runtime.env"; export V6_CERT_FILE="${V6_CERT_FILE:-${V6_STORED_CERT_FILE:-}}" V6_KEY_FILE="${V6_KEY_FILE:-${V6_STORED_KEY_FILE:-}}"; }
-pick_account_store() { local store="$1" field="${2:-name}" label="${3:-Account}" i; mapfile -t names < <(jq -r ".[] | .$field" "$store" 2>/dev/null); ((${#names[@]})) || { echo "No $label accounts found."; return 1; }; menu_title "SELECT $label ACCOUNT"; for i in "${!names[@]}"; do item "$((i+1))" "${names[$i]}"; done; back_item; read_menu_option i '  ► Select account: ' || return 1; [[ "$i" =~ ^[0-9]{1,9}$ ]] && ((i>0 && i<=${#names[@]})) || return 1; account="${names[$((i-1))]}"; }
+pick_account_rows() {
+  local rows="$1" label="$2" choice count i
+  account= identity= selected_local=
+  count="$(jq -er 'length' <<<"$rows")" || { echo 'Cannot read account list.'; return 1; }
+  ((count > 0)) || { echo "No $label accounts available."; return 1; }
+  menu_title "SELECT $label ACCOUNT"
+  for ((i=0; i<count; i++)); do item "$((i+1))" "$(jq -r --argjson i "$i" '.[$i].label' <<<"$rows")"; done
+  back_item
+  read_menu_option choice '  ► Select account: ' || return 1
+  [[ $choice != 0 ]] || return 1
+  if [[ ! $choice =~ ^[0-9]{1,9}$ ]] || ((choice < 1 || choice > count)); then
+    echo 'Invalid selection. Returning to account menu.'; return 1
+  fi
+  account="$(jq -r --argjson i "$((choice-1))" '.[$i].account' <<<"$rows")"
+  identity="$(jq -r --argjson i "$((choice-1))" '.[$i].identity // empty' <<<"$rows")"
+  selected_local="$(jq -r --argjson i "$((choice-1))" '.[$i].local // false' <<<"$rows")"
+}
+pick_account_store() {
+  local rows
+  rows="$(jq -c --arg field "${2:-name}" '[.[] | {account:.[$field],label:.[$field]}]' "$1")" || { echo 'Cannot read account list.'; return 1; }
+  pick_account_rows "$rows" "${3:-Account}"
+}
+pick_ssh_account() {
+  local rows
+  rows="$(python3 "$script_dir/ssh-account-types.py" "$state_dir/ssh-users.json" | jq -c --arg kind "$1" '[.[] | select(.accountType == $kind) | {account:.name,label:(.name + " | expires " + .expiresAt)}]')" || { echo 'Cannot read SSH account list.'; return 1; }
+  pick_account_rows "$rows" "$1"
+}
+pick_certificate() {
+  local rows
+  rows="$(bash "$script_dir/app-ssh-auth.sh" choices "$1")" || return 1
+  pick_account_rows "$rows" Certificate
+}
 
 show_ports() {
   local server_ip os_name arch cores now ram cpu buffer idle idle2 total total2 work
@@ -77,11 +108,11 @@ wireguard_menu() {
     read_menu_option x '  ► Option: ' || return
     case "$x" in
       1) ask_account; bash "$script_dir/wireguard-accounts.sh" create "$account" "$validity"; pause ;;
-      2) pick_account_store "$state_dir/wireguard-users.json" name WireGuard && { read -r -p 'Validity (days): ' validity; bash "$script_dir/wireguard-accounts.sh" renew "$account" "$validity"; }; pause ;;
-      3) pick_account_store "$state_dir/wireguard-users.json" name WireGuard && bash "$script_dir/wireguard-accounts.sh" delete "$account"; pause ;;
+      2) if pick_account_store "$state_dir/wireguard-users.json" name WireGuard; then read -r -p 'Validity (days): ' validity; bash "$script_dir/wireguard-accounts.sh" renew "$account" "$validity"; pause; fi ;;
+      3) if pick_account_store "$state_dir/wireguard-users.json" name WireGuard; then bash "$script_dir/wireguard-accounts.sh" delete "$account"; pause; fi ;;
       4) bash "$script_dir/wireguard-accounts.sh" list; pause ;;
-      5) pick_account_store "$state_dir/wireguard-users.json" name WireGuard && bash "$script_dir/wireguard-accounts.sh" link "$account"; pause ;;
-      6) pick_account_store "$state_dir/wireguard-users.json" name WireGuard && bash "$script_dir/wireguard-accounts.sh" config "$account"; pause ;;
+      5) if pick_account_store "$state_dir/wireguard-users.json" name WireGuard; then bash "$script_dir/wireguard-accounts.sh" link "$account"; pause; fi ;;
+      6) if pick_account_store "$state_dir/wireguard-users.json" name WireGuard; then bash "$script_dir/wireguard-accounts.sh" config "$account"; pause; fi ;;
       7) bash "$script_dir/wireguard-accounts.sh" cleanup; pause ;;
       0) return ;; *) echo 'Invalid option.'; sleep 1 ;;
     esac
@@ -95,9 +126,9 @@ openvpn_menu() {
     read_menu_option x '  ► Option: ' || return
     case "$x" in
       1) ask_account; V6_DOMAIN="$(primary_domain)" bash "$script_dir/openvpn-accounts.sh" create "$account" "$validity"; pause ;;
-      2) pick_account_store "$state_dir/openvpn-users.json" name OpenVPN && { read -r -p 'Validity (days): ' validity; bash "$script_dir/openvpn-accounts.sh" renew "$account" "$validity"; }; pause ;;
-      3) pick_account_store "$state_dir/openvpn-users.json" name OpenVPN && bash "$script_dir/openvpn-accounts.sh" reset-password "$account"; pause ;;
-      4) pick_account_store "$state_dir/openvpn-users.json" name OpenVPN && bash "$script_dir/openvpn-accounts.sh" delete "$account"; pause ;;
+      2) if pick_account_store "$state_dir/openvpn-users.json" name OpenVPN; then read -r -p 'Validity (days): ' validity; bash "$script_dir/openvpn-accounts.sh" renew "$account" "$validity"; pause; fi ;;
+      3) if pick_account_store "$state_dir/openvpn-users.json" name OpenVPN; then bash "$script_dir/openvpn-accounts.sh" reset-password "$account"; pause; fi ;;
+      4) if pick_account_store "$state_dir/openvpn-users.json" name OpenVPN; then bash "$script_dir/openvpn-accounts.sh" delete "$account"; pause; fi ;;
       5) bash "$script_dir/openvpn-accounts.sh" list; pause ;;
       6) bash "$script_dir/openvpn-accounts.sh" generator; pause ;;
       7) cat /etc/openvpn/client-template.ovpn 2>/dev/null || echo 'OpenVPN is not installed.'; pause ;;
@@ -119,8 +150,8 @@ hysteria1_menu() {
     read_menu_option x '  ► Option: ' || return
     case "$x" in
       1) ask_account; load_service_options; read -r -p 'Account password (Enter for generated password): ' password; V6_DOMAIN="$(primary_domain)" bash "$script_dir/hysteria1-accounts.sh" create "$account" "$validity" "${password:-$(openssl rand -hex 12)}"; unset password; pause ;;
-      2) ask_account; bash "$script_dir/hysteria1-accounts.sh" renew "$account" "$validity"; pause ;;
-      3) read -r -p 'Username: ' account; bash "$script_dir/hysteria1-accounts.sh" delete "$account"; pause ;;
+      2) if pick_account_store "$state_dir/hysteria1-users.json" name 'Hysteria 1'; then read -r -p 'Validity (days): ' validity; bash "$script_dir/hysteria1-accounts.sh" renew "$account" "$validity"; pause; fi ;;
+      3) if pick_account_store "$state_dir/hysteria1-users.json" name 'Hysteria 1'; then bash "$script_dir/hysteria1-accounts.sh" delete "$account"; pause; fi ;;
       4) bash "$script_dir/hysteria1-accounts.sh" list; pause ;;
       5) read -r -p 'Upload Mbps: ' up; read -r -p 'Download Mbps: ' down; bash "$script_dir/hysteria1-accounts.sh" speed "$up" "$down"; pause ;;
       0) return ;;
@@ -136,10 +167,10 @@ hysteria2_menu() {
     read_menu_option x '  ► Option: ' || return
     case "$x" in
       1) ask_account; load_service_options; V6_DOMAIN="$(primary_domain)" bash "$script_dir/hysteria2-accounts.sh" create "$account" "$validity"; pause ;;
-      2) pick_account_store "$state_dir/hysteria2-users.json" name 'Hysteria 2' && { read -r -p 'Validity (days): ' validity; bash "$script_dir/hysteria2-accounts.sh" renew "$account" "$validity"; }; pause ;;
-      3) pick_account_store "$state_dir/hysteria2-users.json" name 'Hysteria 2' && bash "$script_dir/hysteria2-accounts.sh" delete "$account"; pause ;;
+      2) if pick_account_store "$state_dir/hysteria2-users.json" name 'Hysteria 2'; then read -r -p 'Validity (days): ' validity; bash "$script_dir/hysteria2-accounts.sh" renew "$account" "$validity"; pause; fi ;;
+      3) if pick_account_store "$state_dir/hysteria2-users.json" name 'Hysteria 2'; then bash "$script_dir/hysteria2-accounts.sh" delete "$account"; pause; fi ;;
       4) bash "$script_dir/hysteria2-accounts.sh" list; pause ;;
-      5) pick_account_store "$state_dir/hysteria2-users.json" name 'Hysteria 2' && bash "$script_dir/hysteria2-accounts.sh" uri "$account"; pause ;;
+      5) if pick_account_store "$state_dir/hysteria2-users.json" name 'Hysteria 2'; then bash "$script_dir/hysteria2-accounts.sh" uri "$account"; pause; fi ;;
       0) return ;; *) echo 'Invalid option.'; sleep 1 ;;
     esac
   done
@@ -165,8 +196,8 @@ zivpn_menu() {
     read_menu_option x '  ► Option: ' || return
     case "$x" in
       1) read -r -p 'Password / username: ' account; read -r -p 'Validity (days): ' validity; V6_DOMAIN="$(primary_domain)" bash "$script_dir/zivpn-accounts.sh" create "$account" "$validity"; pause ;;
-      2) pick_account_store "$state_dir/zivpn-users.json" password ZiVPN && { read -r -p 'Validity (days): ' validity; V6_DOMAIN="$(primary_domain)" bash "$script_dir/zivpn-accounts.sh" renew "$account" "$validity"; }; pause ;;
-      3) pick_account_store "$state_dir/zivpn-users.json" password ZiVPN && bash "$script_dir/zivpn-accounts.sh" delete "$account"; pause ;;
+      2) if pick_account_store "$state_dir/zivpn-users.json" password ZiVPN; then read -r -p 'Validity (days): ' validity; V6_DOMAIN="$(primary_domain)" bash "$script_dir/zivpn-accounts.sh" renew "$account" "$validity"; pause; fi ;;
+      3) if pick_account_store "$state_dir/zivpn-users.json" password ZiVPN; then bash "$script_dir/zivpn-accounts.sh" delete "$account"; pause; fi ;;
       4) bash "$script_dir/zivpn-accounts.sh" list; pause ;;
       0) return ;;
       *) echo 'Invalid option.'; sleep 1 ;;
@@ -207,7 +238,7 @@ ssh_menu() {
   while true; do
     clear; menu_title 'SSH ACCOUNT MANAGEMENT'; item 1 'Create SSH account'; item 2 'Renew SSH account'; item 3 'Delete SSH account'; item 4 'List SSH accounts'; item 5 'App certificate accounts'; back_item
     read_menu_option x '  ► Option: ' || return
-    case "$x" in 1) ask_account; bash "$script_dir/ssh-accounts.sh" create "$account" "$validity"; pause;; 2) ask_account; bash "$script_dir/ssh-accounts.sh" renew "$account" "$validity"; pause;; 3) bash "$script_dir/ssh-accounts.sh" choose-delete; pause;; 4) bash "$script_dir/ssh-accounts.sh" list; pause;; 5) app_cert_menu;; 0) return;; *) echo 'Invalid option.'; sleep 1;; esac
+    case "$x" in 1) ask_account; bash "$script_dir/ssh-accounts.sh" create "$account" "$validity"; pause;; 2) if pick_ssh_account password; then read -r -p 'Validity (days): ' validity; bash "$script_dir/ssh-accounts.sh" renew "$account" "$validity"; pause; fi;; 3) if pick_ssh_account password; then bash "$script_dir/ssh-accounts.sh" delete "$account"; pause; fi;; 4) bash "$script_dir/ssh-accounts.sh" list; pause;; 5) app_cert_menu;; 0) return;; *) echo 'Invalid option.'; sleep 1;; esac
   done
 }
 
@@ -218,16 +249,16 @@ app_cert_menu() {
     read_menu_option x '  ► Option: ' || return
     case "$x" in
       1) ask_account; bash "$script_dir/certificate-accounts.sh" create "$account" "$validity"; pause ;;
-      2) ask_account; bash "$script_dir/certificate-accounts.sh" renew "$account" "$validity"; pause ;;
-      3) read -r -p 'Certificate account name: ' account; bash "$script_dir/app-ssh-auth.sh" revoke "$account" certificate-account; pause ;;
+      2) if pick_certificate renew; then read -r -p 'Validity (days): ' validity; bash "$script_dir/certificate-accounts.sh" renew "$account" "$validity"; pause; fi ;;
+      3) if pick_certificate revoke; then bash "$script_dir/app-ssh-auth.sh" revoke "$account" certificate-account --identity "$identity"; pause; fi ;;
       4) bash "$script_dir/app-ssh-auth.sh" bundle-list; pause ;;
-      5) read -r -p 'Certificate account name: ' account; bash "$script_dir/app-ssh-auth.sh" bundle-export "$account"; pause ;;
+      5) if pick_certificate gen; then bash "$script_dir/app-ssh-auth.sh" bundle-export "$account"; pause; fi ;;
       6) ask_account; bash "$script_dir/certificate-accounts.sh" import "$account" "$validity"; pause ;;
-      7) read -r -p 'Certificate account name: ' account; bash "$script_dir/certificate-details.sh" "$account"; pause ;;
-      8) read -r -p 'Certificate account name: ' account; bash "$script_dir/app-ssh-auth.sh" shared-export "$account"; pause ;;
+      7) if pick_certificate details; then if [[ $selected_local == true ]]; then bash "$script_dir/certificate-details.sh" "$account"; else bash "$script_dir/certificate-details.sh" "$account" "$identity"; fi; pause; fi ;;
+      8) if pick_certificate share; then bash "$script_dir/app-ssh-auth.sh" shared-export "$account" --identity "$identity"; pause; fi ;;
       9) bash "$script_dir/app-ssh-auth.sh" shared-import --paste; pause ;;
-      10) read -r -p 'Certificate account name: ' account; read -r -p 'Shared identity ID (from List): ' identity; if [[ -n $identity ]]; then bash "$script_dir/app-ssh-auth.sh" revoke "$account" certificate-account --identity "$identity"; else echo 'Identity is required.'; fi; pause ;;
-      11) bash "$script_dir/ssh-accounts.sh" choose-delete-certificate; pause ;;
+      10) if pick_certificate shared-revoke; then bash "$script_dir/app-ssh-auth.sh" revoke "$account" certificate-account --identity "$identity"; pause; fi ;;
+      11) if pick_ssh_account certificate; then read -r -p 'Delete this certificate account and ALL its identities on this VPS? [y/N] ' confirm; [[ $confirm =~ ^[Yy]$ ]] && bash "$script_dir/ssh-accounts.sh" delete-certificate "$account"; pause; fi ;;
       0) return ;; *) echo 'Invalid option.'; sleep 1 ;;
     esac
   done
