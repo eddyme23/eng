@@ -2,6 +2,7 @@ import base64
 import contextlib
 import copy
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -67,6 +68,47 @@ class XrayManagerTest(unittest.TestCase):
         self.assertEqual(urlparse(links[0]).hostname, 'direct.example.test')
         self.assertEqual(urlparse(links[1]).hostname, 'tls.example.test')
         self.assertEqual(parse_qs(urlparse(links[1]).query)['sni'], ['tls.example.test'])
+
+    def test_display_separates_links_without_changing_uri_lines(self):
+        for protocol in x.PROTOCOLS:
+            raw = list(x.links(SETTINGS, protocol, USERS[protocol][0]))
+            output = x.display_links(SETTINGS, protocol, USERS[protocol][0])
+            copied = [line for line in output.splitlines() if line.startswith(('vless://', 'vmess://', 'trojan://', 'ss://'))]
+            self.assertEqual(copied, raw)
+            self.assertEqual(output.count('\n\n'), len(raw) - 1)
+            self.assertTrue(output.startswith('[01] ' + protocol.upper()))
+
+    def test_reality_address_update_preserves_authentication_and_needs_no_restart(self):
+        with tempfile.TemporaryDirectory() as folder:
+            state = Path(folder)
+            x.atomic(state / 'xray-settings.json', SETTINGS)
+            x.atomic(state / 'xray-users.json', USERS)
+            with patch.object(x.subprocess, 'run') as run:
+                x.set_reality_address(state, 'fr.vpnguruz.store')
+                run.assert_not_called()
+            expected = copy.deepcopy(SETTINGS)
+            expected['reality']['domain'] = 'fr.vpnguruz.store'
+            self.assertEqual(x.load(state / 'xray-settings.json'), expected)
+            self.assertEqual(x.accounts_at(state), USERS)
+            link = list(x.links(expected, 'vless', USERS['vless'][0]))[-1]
+            self.assertEqual(urlparse(link).hostname, 'fr.vpnguruz.store')
+            self.assertEqual(parse_qs(urlparse(link).query)['sni'], [SETTINGS['reality']['serverName']])
+            with self.assertRaises(ValueError):
+                x.set_reality_address(state, '')
+
+    def test_reality_address_cli_dispatches_without_touching_services(self):
+        with tempfile.TemporaryDirectory() as folder:
+            state = Path(folder)
+            x.atomic(state / 'xray-settings.json', SETTINGS)
+            output = io.StringIO()
+            with patch.dict(os.environ, V6_STATE_DIR=folder), patch.object(x.os, 'geteuid', return_value=0, create=True), \
+                    patch.object(x, 'locked', return_value=contextlib.nullcontext()), \
+                    patch('sys.argv', ['xray-manager.py', 'reality-address', '--reality-domain', 'fr.vpnguruz.store']), \
+                    patch.object(x.subprocess, 'run') as run, contextlib.redirect_stdout(output):
+                x.main()
+            run.assert_not_called()
+            self.assertIn('fr.vpnguruz.store:443', output.getvalue())
+            self.assertNotIn(SETTINGS['reality']['privateKey'], output.getvalue())
 
     def test_grpc_is_tls_only_with_service_name_and_h2(self):
         for protocol in ['vless', 'vmess', 'trojan']:
@@ -239,7 +281,17 @@ class XrayManagerTest(unittest.TestCase):
             self.assertEqual(x.load(state / 'xray-users.json'), USERS)
             self.assertEqual(first['domain'], 'direct.example.test')
             self.assertEqual(first['tlsDomain'], 'tls.example.test')
+            self.assertEqual(first['reality']['domain'], 'direct.example.test')
             self.assertEqual(len(x.load(state / 'xray-routes.json')), 6)
+            with patch.dict(os.environ, V6_STATE_DIR=folder), patch.object(x.os, 'geteuid', return_value=0, create=True), \
+                    patch.object(x, 'locked', return_value=contextlib.nullcontext()), \
+                    patch('sys.argv', argv + ['--reality-domain', 'new.example.test']):
+                x.main()
+            updated = x.load(state / 'xray-settings.json')
+            expected = copy.deepcopy(first)
+            expected['reality']['domain'] = 'new.example.test'
+            self.assertEqual(updated, expected)
+            self.assertEqual(x.accounts_at(state), USERS)
 
 
 if __name__ == '__main__':

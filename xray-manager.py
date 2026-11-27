@@ -16,7 +16,7 @@ import secrets
 import subprocess
 import tempfile
 import uuid
-from urllib.parse import urlencode, quote
+from urllib.parse import urlencode, quote, urlparse, parse_qs
 
 PROTOCOLS = ('vless', 'vmess', 'trojan', 'shadowsocks')
 SS_METHOD = '2022-blake3-aes-128-gcm'
@@ -247,6 +247,35 @@ def links(settings, protocol, user):
         yield f'vless://{user["uuid"]}@{r["domain"]}:443?{urlencode(query)}#ENG-{quote(user["name"])}-REALITY'
 
 
+def display_links(settings, protocol, user):
+    """Human-readable blocks; individual URI lines remain byte-for-byte intact."""
+    blocks = []
+    names = {'ws': 'WebSocket', 'httpupgrade': 'HTTPUpgrade', 'xhttp': 'XHTTP', 'grpc': 'gRPC', 'tcp': 'TCP'}
+    for number, link in enumerate(links(settings, protocol, user), 1):
+        if protocol == 'vmess':
+            data = json.loads(base64.b64decode(link[8:]))
+            network, security, port = data['net'], 'TLS' if data['tls'] else 'NTLS', data['port']
+        elif protocol == 'shadowsocks':
+            network, security, port = 'tcp', 'SS2022', settings['shadowsocks']['port']
+        else:
+            uri = urlparse(link)
+            query = parse_qs(uri.query)
+            network, security, port = query['type'][0], query['security'][0].upper(), uri.port
+            if security == 'NONE':
+                security = 'NTLS'
+        blocks.append(f'[{number:02d}] {protocol.upper()} / {names[network]} / {security} / {port}\n{link}')
+    return '\n\n'.join(blocks)
+
+
+def set_reality_address(state, value):
+    if not value:
+        raise ValueError('Specify --reality-domain with the DNS-only hostname or IPv4 to connect to')
+    settings = load(state / 'xray-settings.json')
+    settings['reality']['domain'] = hostname(value)
+    atomic(state / 'xray-settings.json', settings)
+    return settings['reality']['domain']
+
+
 def change(state, binary, protocol, action, name='', days=30):
     old = accounts_at(state)
     users = copy.deepcopy(old)
@@ -308,7 +337,7 @@ def locked(state, account_operation=False):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('action', choices=['init', 'render', 'decorate', 'metadata', 'create', 'renew', 'delete', 'list', 'links', 'cleanup'])
+    parser.add_argument('action', choices=['init', 'render', 'decorate', 'metadata', 'create', 'renew', 'delete', 'list', 'links', 'cleanup', 'reality-address'])
     parser.add_argument('protocol', nargs='?', choices=PROTOCOLS, default='vless')
     parser.add_argument('name', nargs='?', default='')
     parser.add_argument('days', nargs='?', type=int, default=30)
@@ -337,15 +366,19 @@ def main():
                 if not re.fullmatch(r'[\w-]{43}', private) or not re.fullmatch(r'[\w-]{43}', public):
                     raise ValueError('Cannot read Xray X25519 keys')
                 atomic(state / 'xray-settings.json', dict(schema=1, domain=domain, tlsDomain=primary, reality=dict(
-                    domain=hostname(args.reality_domain or 'reality.' + domain), serverName=sni,
+                    domain=hostname(args.reality_domain or domain), serverName=sni,
                     target=sni + ':443', privateKey=private, publicKey=public, shortId=secrets.token_hex(8))))
             if not (state / 'xray-users.json').exists():
                 atomic(state / 'xray-users.json', {p: [] for p in PROTOCOLS})
             settings = load(state / 'xray-settings.json')
+            if args.reality_domain:
+                settings['reality']['domain'] = hostname(args.reality_domain)
             if 'shadowsocks' not in settings:
                 if not 1024 <= args.shadowsocks_port <= 65535 or args.shadowsocks_port in (13101, 13102, 13103, 13104, 13105, 13106, 13107, 13108, 13109, 13110):
                     raise ValueError('Choose an unused TCP port from 1024 to 65535 for Shadowsocks')
                 settings['shadowsocks'] = dict(port=args.shadowsocks_port, serverKey=base64.b64encode(secrets.token_bytes(16)).decode())
+                atomic(state / 'xray-settings.json', settings)
+            elif args.reality_domain:
                 atomic(state / 'xray-settings.json', settings)
             atomic(state / 'xray-users.json', accounts_at(state))
             render(state, args.binary)
@@ -355,6 +388,10 @@ def main():
             decorate(state)
         elif args.action == 'metadata':
             metadata(state)
+        elif args.action == 'reality-address':
+            address = set_reality_address(state, args.reality_domain)
+            print(f'REALITY connection address: {address}:443')
+            print('Re-export the VLESS link. SNI, keys, short ID and accounts were preserved; no service restart was needed.')
         elif args.action == 'list':
             for u in accounts_at(state)[args.protocol]:
                 print(u['name'], u['expiresAt'], 'active' if active(u) else 'expired', sep='\t')
@@ -363,7 +400,9 @@ def main():
             if not user or not active(user):
                 raise ValueError('Active account not found')
             print('Private connection links. Expiry (UTC, inclusive):', user['expiresAt'])
-            print('\n'.join(links(load(state / 'xray-settings.json'), args.protocol, user)))
+            print()
+            print(display_links(load(state / 'xray-settings.json'), args.protocol, user))
+            print()
         else:
             change(state, args.binary, args.protocol, args.action, args.name, args.days)
             print('Xray account update applied. Existing Xray sessions were disconnected.')

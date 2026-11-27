@@ -70,11 +70,26 @@ bash ./xray-install.sh --domain direct.example.com --reality-domain reality.exam
 
 Create DNS-only A records (and AAAA only if this VPS has working IPv6) for these
 names pointing to this VPS. The default direct hostname is ENG's existing primary
-domain, and the default REALITY address is `reality.PRIMARY_DOMAIN`. TLS links
+domain, and fresh installations use that existing direct hostname as the REALITY
+address too. A separate REALITY subdomain is optional and needs its own DNS-only
+record; installation does not create it. TLS links
 use ENG's existing primary domain and certificate, even if the NTLS alias differs.
 Use DNS-only for the TLS hostname too when you want direct TLS connections.
 The installer does not create or change DNS records or Cloudflare settings.
 Repeated installation preserves settings, REALITY keys, short ID and accounts.
+An explicit `--reality-domain` on reinstall updates only the exported connection
+address. To change that address without reinstalling or restarting services:
+
+```bash
+bash ./xray-accounts.sh reality-address --reality-domain fr.vpnguruz.store
+```
+
+Re-export the VLESS link afterward. Existing installations keep their previously
+selected address until explicitly changed. If an old `reality.YOUR_DOMAIN` name
+has no DNS record, set the address to an existing DNS-only hostname or create the
+missing record. In a client, edit the connection address while preserving the
+exported SNI, public key, short ID and Vision flow. A different address does not
+require changing those authentication settings.
 
 REALITY's address and SNI are different: the address is your DNS-only hostname;
 the default SNI/target is `www.apple.com:443`. HAProxy selects REALITY using
@@ -103,7 +118,10 @@ bash ./xray-accounts.sh create shadowsocks eddy 30
 bash ./xray-accounts.sh links shadowsocks eddy
 ```
 
-Exported links contain private UUIDs/passwords/keys. For VLESS, VMess and Trojan, put the appropriate link into
+Each exported link is displayed in its own labeled block with a blank line
+between blocks. Copy the URI line into the client or Gen; whitespace is never
+inserted inside the URI. Exported links contain private UUIDs/passwords/keys.
+For VLESS, VMess and Trojan, put the appropriate link into
 the Gen's existing V2Ray port-80 or port-443 server field. Each field holds one
 chosen configuration, so separate server entries can expose different transports.
 All four checked apps already have HTTPUpgrade/XHTTP parsing and configuration;
