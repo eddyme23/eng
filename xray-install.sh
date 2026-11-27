@@ -87,7 +87,7 @@ for file in xray-manager.py xray-accounts.sh xray-menu.sh; do
 done
 cat > /etc/systemd/system/frimps-xray.service <<EOF
 [Unit]
-Description=ENG Xray VLESS VMess Trojan
+Description=ENG Xray VLESS VMess Trojan Shadowsocks
 After=network-online.target
 Wants=network-online.target
 [Service]

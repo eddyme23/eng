@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('eng_xray', ROOT / 'xray-manager.py')
@@ -18,8 +18,10 @@ spec.loader.exec_module(x)
 SETTINGS = dict(domain='direct.example.test', reality=dict(domain='reality.example.test',
                 serverName='www.microsoft.com', target='www.microsoft.com:443',
                 privateKey='A' * 43, publicKey='B' * 43, shortId='abcd1234'))
+SETTINGS['shadowsocks'] = dict(port=8388, serverKey=base64.b64encode(b'server-test-key!').decode())
 USERS = {p: [dict(name='customer', expiresAt='2099-01-01', uuid='11111111-1111-4111-8111-111111111111',
                   password='testing-only')] for p in x.PROTOCOLS}
+USERS['shadowsocks'][0]['password'] = base64.b64encode(b'client-test-key!').decode()
 
 
 class XrayManagerTest(unittest.TestCase):
@@ -28,22 +30,24 @@ class XrayManagerTest(unittest.TestCase):
         for rows in users.values():
             rows.append(dict(rows[0], name='expired', expiresAt='2000-01-01'))
         config = x.configuration(SETTINGS, users)
-        self.assertEqual(len(config['inbounds']), 7)
+        self.assertEqual(len(config['inbounds']), 11)
         for inbound in config['inbounds']:
-            self.assertEqual(inbound['listen'], '127.0.0.1')
-            self.assertEqual([u['email'] for u in inbound['settings']['clients']], ['customer'])
-        self.assertEqual(config['inbounds'][-1]['settings']['clients'][0]['flow'], 'xtls-rprx-vision')
-        self.assertEqual(len({i['port'] for i in config['inbounds']}), 7)
+            native = inbound['protocol'] == 'shadowsocks'
+            self.assertEqual(inbound['listen'], '0.0.0.0' if native else '127.0.0.1')
+            self.assertEqual([u['email'] for u in inbound['settings']['users' if native else 'clients']], ['customer'])
+        reality = next(i for i in config['inbounds'] if i['tag'] == 'vless-reality')
+        self.assertEqual(reality['settings']['clients'][0]['flow'], 'xtls-rprx-vision')
+        self.assertEqual(len({i['port'] for i in config['inbounds']}), 11)
 
     def test_links_match_paths_tls_and_credentials(self):
-        for protocol, count in [('vless', 7), ('vmess', 4), ('trojan', 1)]:
+        for protocol, count in [('vless', 8), ('vmess', 5), ('trojan', 2)]:
             links = list(x.links(SETTINGS, protocol, USERS[protocol][0]))
             self.assertEqual(len(links), count)
             for link in links:
                 if protocol == 'vmess':
                     data = json.loads(base64.b64decode(link[8:]))
                     self.assertEqual(data['aid'], '0')
-                    self.assertEqual(data['net'], 'ws' if data['path'].endswith('-ws') else 'httpupgrade')
+                    self.assertEqual(data['net'], 'grpc' if data['path'].endswith('-grpc') else 'ws' if data['path'].endswith('-ws') else 'httpupgrade')
                     self.assertEqual(data['tls'], 'tls' if data['port'] == '443' else '')
                 else:
                     uri = urlparse(link)
@@ -63,6 +67,42 @@ class XrayManagerTest(unittest.TestCase):
         self.assertEqual(urlparse(links[0]).hostname, 'direct.example.test')
         self.assertEqual(urlparse(links[1]).hostname, 'tls.example.test')
         self.assertEqual(parse_qs(urlparse(links[1]).query)['sni'], ['tls.example.test'])
+
+    def test_grpc_is_tls_only_with_service_name_and_h2(self):
+        for protocol in ['vless', 'vmess', 'trojan']:
+            output = list(x.links(SETTINGS, protocol, USERS[protocol][0]))
+            if protocol == 'vmess':
+                data = next(d for d in [json.loads(base64.b64decode(link[8:])) for link in output] if d['net'] == 'grpc')
+                self.assertEqual((data['port'], data['tls'], data['path'], data['alpn']), ('443', 'tls', 'vmess-grpc', 'h2'))
+            else:
+                parsed = [(urlparse(link), parse_qs(urlparse(link).query)) for link in output]
+                uri, query = next((uri, query) for uri, query in parsed if query.get('type') == ['grpc'])
+                self.assertEqual(uri.port, 443)
+                self.assertEqual(query['serviceName'], [protocol + '-grpc'])
+                self.assertEqual(query['alpn'], ['h2'])
+                self.assertNotIn('path', query)
+                self.assertNotIn('host', query)
+
+    def test_shadowsocks_link_and_empty_account_set_cannot_fall_back_to_server_key(self):
+        link, = x.links(SETTINGS, 'shadowsocks', USERS['shadowsocks'][0])
+        uri = urlparse(link)
+        self.assertEqual(uri.scheme, 'ss')
+        self.assertEqual(uri.port, 8388)
+        self.assertEqual(unquote(uri.username), x.SS_METHOD + ':' + SETTINGS['shadowsocks']['serverKey'] + ':' + USERS['shadowsocks'][0]['password'])
+        users = copy.deepcopy(USERS)
+        users['shadowsocks'] = []
+        self.assertFalse(any(i['protocol'] == 'shadowsocks' for i in x.configuration(SETTINGS, users)['inbounds']))
+        users['shadowsocks'] = [dict(USERS['shadowsocks'][0], expiresAt='2000-01-01')]
+        self.assertFalse(any(i['protocol'] == 'shadowsocks' for i in x.configuration(SETTINGS, users)['inbounds']))
+
+    def test_legacy_account_store_is_normalized_without_changing_existing_ids(self):
+        with tempfile.TemporaryDirectory() as folder:
+            state = Path(folder)
+            old = {p: USERS[p] for p in ['vless', 'vmess', 'trojan']}
+            x.atomic(state / 'xray-users.json', old)
+            normalized = x.accounts_at(state)
+            self.assertEqual(normalized['shadowsocks'], [])
+            self.assertEqual({p: normalized[p] for p in old}, old)
 
     def test_gateway_overlay_preserves_routes_and_is_idempotent(self):
         haproxy = 'frontend public_tcp_443\n    bind :443\n    default_backend main_tls_router\nbackend main_tls_router\n    server tls 127.0.0.1:9443\n'
@@ -95,7 +135,7 @@ class XrayManagerTest(unittest.TestCase):
             x.metadata(state)
             self.assertEqual(x.load(state / 'backends.json'), first)
             self.assertEqual(first['publicRoutes'][0], existing)
-            self.assertEqual(len(first['publicRoutes']), 12)
+            self.assertEqual(len(first['publicRoutes']), 15)
             self.assertNotIn('privateKey', (state / 'backends.json').read_text())
 
     def test_upgrade_and_rerender_keep_existing_ssh_and_openvpn_routes(self):
@@ -148,6 +188,11 @@ class XrayManagerTest(unittest.TestCase):
                 self.assertEqual(x.accounts_at(state)['vmess'], USERS['vmess'])
                 x.change(state, 'unused', 'vless', 'create', 'customer', 90)
                 self.assertNotEqual(x.accounts_at(state)['vless'][0]['uuid'], USERS['vless'][0]['uuid'])
+                x.change(state, 'unused', 'shadowsocks', 'renew', 'customer', 90)
+                self.assertEqual(x.accounts_at(state)['shadowsocks'][0]['password'], USERS['shadowsocks'][0]['password'])
+                x.change(state, 'unused', 'shadowsocks', 'delete', 'customer')
+                x.change(state, 'unused', 'shadowsocks', 'create', 'customer', 90)
+                self.assertEqual(len(base64.b64decode(x.accounts_at(state)['shadowsocks'][0]['password'])), 16)
 
     def test_expiry_and_invalid_requests(self):
         with tempfile.TemporaryDirectory() as folder:

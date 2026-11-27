@@ -28,6 +28,8 @@ Xray installation, account management and live-server update instructions: [XRAY
 | Xray VLESS XHTTP | 80 NTLS / 443 TLS |
 | Xray Trojan WebSocket | 443 TLS |
 | Xray VLESS REALITY + Vision | 443 TCP, separate SNI route |
+| Xray VLESS / VMess / Trojan gRPC | 443 TLS, HTTP/2 |
+| Shadowsocks 2022 | 8388 TCP by default; active after account creation |
 | OpenVPN Websocket | 80, 8080, 8880; path `/openvpn` |
 | OpenVPN TLS | 8433; path `/openvpn` |
 | OpenVPN | TCP/UDP 1194 |

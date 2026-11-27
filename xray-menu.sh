@@ -15,13 +15,14 @@ pick() {
   account="${names[$((choice-1))]}"
 }
 while true; do
-  printf '\nXRAY ACCOUNT MANAGEMENT\n  [01] VLESS\n  [02] VMess\n  [03] Trojan\n  [04] Status\n  [05] Restart Xray\n  [00] Back\n'
+  printf '\nXRAY ACCOUNT MANAGEMENT\n  [01] VLESS\n  [02] VMess\n  [03] Trojan\n  [04] Shadowsocks 2022\n  [05] Status\n  [06] Restart Xray\n  [00] Back\n'
   read -r -p 'Option: ' option || exit 0
   case "$option" in
     0|00) exit 0;;
     1|01) protocol=vless;; 2|02) protocol=vmess;; 3|03) protocol=trojan;;
-    4|04) systemctl status frimps-xray --no-pager; read -r -p 'Press Enter...' _; continue;;
-    5|05) systemctl restart frimps-xray; read -r -p 'Press Enter...' _; continue;;
+    4|04) protocol=shadowsocks;;
+    5|05) systemctl status frimps-xray --no-pager; read -r -p 'Press Enter...' _; continue;;
+    6|06) systemctl restart frimps-xray; read -r -p 'Press Enter...' _; continue;;
     *) echo 'Invalid option.'; continue;;
   esac
   if [[ ! -s "$state_dir/xray-settings.json" ]]; then

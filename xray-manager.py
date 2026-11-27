@@ -18,7 +18,8 @@ import tempfile
 import uuid
 from urllib.parse import urlencode, quote
 
-PROTOCOLS = ('vless', 'vmess', 'trojan')
+PROTOCOLS = ('vless', 'vmess', 'trojan', 'shadowsocks')
+SS_METHOD = '2022-blake3-aes-128-gcm'
 # One internal listener per transport. TLS is supplied by the existing gateway.
 TRANSPORTS = (
     ('vless', 'ws', '/vless-ws', 13101),
@@ -27,6 +28,9 @@ TRANSPORTS = (
     ('vmess', 'ws', '/vmess-ws', 13104),
     ('vmess', 'httpupgrade', '/vmess-upgrade', 13105),
     ('trojan', 'ws', '/trojan-ws', 13106),
+    ('vless', 'grpc', '/vless-grpc', 13108),
+    ('vmess', 'grpc', '/vmess-grpc', 13109),
+    ('trojan', 'grpc', '/trojan-grpc', 13110),
 )
 BEGIN, END = '# BEGIN ENG XRAY', '# END ENG XRAY'
 
@@ -65,8 +69,9 @@ def configuration(settings, accounts):
                  else {'id': u['uuid'], **({'alterId': 0} if protocol == 'vmess' else {})}))
                  for u in accounts[protocol] if active(u)]
         stream = {'network': network, 'security': 'none',
-                  {'ws': 'wsSettings', 'httpupgrade': 'httpupgradeSettings', 'xhttp': 'xhttpSettings'}[network]:
-                  {'path': path, **({'mode': 'auto'} if network == 'xhttp' else {})}}
+                  {'ws': 'wsSettings', 'httpupgrade': 'httpupgradeSettings', 'xhttp': 'xhttpSettings', 'grpc': 'grpcSettings'}[network]:
+                  ({'serviceName': path.lstrip('/'), 'multiMode': False} if network == 'grpc'
+                   else {'path': path, **({'mode': 'auto'} if network == 'xhttp' else {})})}
         inbounds.append({'tag': protocol + '-' + network, 'listen': '127.0.0.1', 'port': port,
                          'protocol': protocol, 'settings': {'clients': users, **({'decryption': 'none'} if protocol == 'vless' else {})},
                          'streamSettings': stream})
@@ -77,6 +82,15 @@ def configuration(settings, accounts):
                      'streamSettings': {'network': 'tcp', 'security': 'reality', 'realitySettings': {
                          'show': False, 'target': r['target'], 'xver': 0,
                          'serverNames': [r['serverName']], 'privateKey': r['privateKey'], 'shortIds': [r['shortId']]}}})
+    ss_users = [u for u in accounts.get('shadowsocks', []) if active(u)]
+    if ss_users:
+        ss = settings['shadowsocks']
+        # An empty SS2022 user list falls back to single-user server-key auth.
+        # Omit the listener altogether when no accounts remain, so revocation
+        # cannot accidentally grant access with only the shared server key.
+        inbounds.append({'tag': 'shadowsocks-2022', 'listen': '0.0.0.0', 'port': ss['port'], 'protocol': 'shadowsocks',
+                         'settings': {'method': SS_METHOD, 'password': ss['serverKey'], 'network': 'tcp',
+                                      'users': [dict(email=u['name'], password=u['password']) for u in ss_users]}})
     return {'log': {'loglevel': 'warning'}, 'inbounds': inbounds,
             'outbounds': [{'protocol': 'freedom', 'tag': 'direct'}, {'protocol': 'blackhole', 'tag': 'blocked'}],
             'routing': {'rules': [{'type': 'field', 'ip': ['127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12',
@@ -85,7 +99,12 @@ def configuration(settings, accounts):
 
 
 def accounts_at(state):
-    return load(state / 'xray-users.json', {p: [] for p in PROTOCOLS})
+    stored = load(state / 'xray-users.json', {})
+    return {p: stored.get(p, []) for p in PROTOCOLS}
+
+
+def tls_modes(protocol, network):
+    return [True] if protocol == 'trojan' or network == 'grpc' else [False, True]
 
 
 def validate_config(binary, config, directory):
@@ -100,7 +119,7 @@ def render(state, binary):
     config = configuration(settings, accounts_at(state))
     validate_config(binary, config, state)
     atomic(state / 'xray.json', config)
-    atomic(state / 'xray-routes.json', {path: f'127.0.0.1:{port}' for _, _, path, port in TRANSPORTS})
+    atomic(state / 'xray-routes.json', {path: f'127.0.0.1:{port}' for _, network, path, port in TRANSPORTS if network != 'grpc'})
 
 
 def strip_overlay(text):
@@ -126,7 +145,17 @@ def overlay_haproxy(text, settings):
 def overlay_nginx(text):
     text = strip_overlay(text)
     lines = []
-    for _, _, path, port in TRANSPORTS:
+    for _, network, path, port in TRANSPORTS:
+        if network == 'grpc':
+            lines.append(f'''    location ^~ {path}/ {{
+        grpc_pass grpc://127.0.0.1:{port};
+        grpc_read_timeout 1h;
+        grpc_send_timeout 1h;
+        grpc_socket_keepalive on;
+        grpc_set_header Host $host;
+        client_max_body_size 0;
+    }}''')
+            continue
         locations = [f'= {path}'] + ([f'^~ {path}/'] if path == '/vless-xhttp' else [])
         for location in locations:
             lines.append(f'''    location {location} {{
@@ -164,35 +193,49 @@ def metadata(state):
     data = load(state / 'backends.json')
     rows = [r for r in data['publicRoutes'] if r.get('owner') != 'eng-xray']
     for protocol, network, path, port in TRANSPORTS:
-        for tls in ([True] if protocol == 'trojan' else [False, True]):
-            rows.append(dict(owner='eng-xray', transport='tls-http' if tls else 'plain-http',
+        for tls in tls_modes(protocol, network):
+            rows.append(dict(owner='eng-xray', transport=('tls-grpc' if network == 'grpc' else 'tls-http') if tls else 'plain-http',
                              path=path, backend=f'xray-{protocol}-{network}:{port}', publicPort=443 if tls else 80))
     data['publicRoutes'] = rows
     data['xrayReality'] = {'publicPort': 443, 'backend': '127.0.0.1:13107',
                            'serverName': load(state / 'xray-settings.json')['reality']['serverName']}
+    ss = load(state / 'xray-settings.json').get('shadowsocks')
+    if ss:
+        data['xrayShadowsocks'] = {'publicPort': ss['port'], 'transport': 'tcp', 'method': SS_METHOD}
     atomic(state / 'backends.json', data)
 
 
 def links(settings, protocol, user):
+    if protocol == 'shadowsocks':
+        ss = settings['shadowsocks']
+        # SS2022 SIP002 credentials contain both the server and per-user keys.
+        credential = quote(SS_METHOD + ':' + ss['serverKey'] + ':' + user['password'], safe='')
+        yield f'ss://{credential}@{settings["domain"]}:{ss["port"]}#ENG-{quote(user["name"])}-SS2022-TCP'
+        return
     for proto, network, path, _ in TRANSPORTS:
         if proto != protocol:
             continue
-        for tls in ([True] if protocol == 'trojan' else [False, True]):
+        for tls in tls_modes(protocol, network):
             host = settings.get('tlsDomain', settings['domain']) if tls else settings['domain']
             port = 443 if tls else 80
             label = f'ENG-{user["name"]}-{protocol}-{network}-' + ('TLS' if tls else 'NTLS')
             if protocol == 'vmess':
                 data = dict(v='2', ps=label, add=host, port=str(port), id=user['uuid'], aid='0', scy='auto',
-                            net=network, type='none', host=host, path=path, tls='tls' if tls else '', sni=host if tls else '')
+                            net=network, type='gun' if network == 'grpc' else 'none', host=host,
+                            path=path.lstrip('/') if network == 'grpc' else path, tls='tls' if tls else '', sni=host if tls else '')
                 if tls:
-                    data.update(alpn='http/1.1', fp='chrome')
+                    data.update(alpn='h2' if network == 'grpc' else 'http/1.1', fp='chrome')
                 yield 'vmess://' + base64.b64encode(json.dumps(data, separators=(',', ':')).encode()).decode()
             else:
                 query = dict(type=network, security='tls' if tls else 'none', host=host, path=path)
+                if network == 'grpc':
+                    query.pop('host')
+                    query.pop('path')
+                    query.update(serviceName=path.lstrip('/'), mode='gun')
                 if protocol == 'vless':
                     query['encryption'] = 'none'
                 if tls:
-                    query.update(sni=host, fp='chrome', alpn='http/1.1' if network != 'xhttp' else 'h2,http/1.1')
+                    query.update(sni=host, fp='chrome', alpn='h2' if network == 'grpc' else 'h2,http/1.1' if network == 'xhttp' else 'http/1.1')
                 if network == 'xhttp':
                     query['mode'] = 'auto'
                 credential = user['password'] if protocol == 'trojan' else user['uuid']
@@ -216,7 +259,8 @@ def change(state, binary, protocol, action, name='', days=30):
         if action == 'create':
             if matches:
                 raise ValueError('Account already exists; renew it or delete it first')
-            rows.append(dict(name=name, expiresAt=expiry, **({'password': secrets.token_urlsafe(32)}
+            rows.append(dict(name=name, expiresAt=expiry, **({'password': base64.b64encode(secrets.token_bytes(16)).decode()}
+                        if protocol == 'shadowsocks' else {'password': secrets.token_urlsafe(32)}
                         if protocol == 'trojan' else {'uuid': str(uuid.uuid4())})))
         else:
             if not matches:
@@ -232,6 +276,8 @@ def change(state, binary, protocol, action, name='', days=30):
         if users == old:
             return
     settings = load(state / 'xray-settings.json')
+    if protocol == 'shadowsocks' and 'shadowsocks' not in settings:
+        raise ValueError('Run xray-install.sh to upgrade Shadowsocks settings first')
     config = configuration(settings, users)
     validate_config(binary, config, state)
     old_config = (state / 'xray.json').read_text()
@@ -269,6 +315,7 @@ def main():
     parser.add_argument('--domain')
     parser.add_argument('--reality-domain')
     parser.add_argument('--reality-sni', default='www.apple.com')
+    parser.add_argument('--shadowsocks-port', type=int, default=8388)
     parser.add_argument('--binary', default='/usr/local/libexec/frimps-xray')
     args = parser.parse_args()
     if os.geteuid() != 0:
@@ -294,6 +341,13 @@ def main():
                     target=sni + ':443', privateKey=private, publicKey=public, shortId=secrets.token_hex(8))))
             if not (state / 'xray-users.json').exists():
                 atomic(state / 'xray-users.json', {p: [] for p in PROTOCOLS})
+            settings = load(state / 'xray-settings.json')
+            if 'shadowsocks' not in settings:
+                if not 1024 <= args.shadowsocks_port <= 65535 or args.shadowsocks_port in (13101, 13102, 13103, 13104, 13105, 13106, 13107, 13108, 13109, 13110):
+                    raise ValueError('Choose an unused TCP port from 1024 to 65535 for Shadowsocks')
+                settings['shadowsocks'] = dict(port=args.shadowsocks_port, serverKey=base64.b64encode(secrets.token_bytes(16)).decode())
+                atomic(state / 'xray-settings.json', settings)
+            atomic(state / 'xray-users.json', accounts_at(state))
             render(state, args.binary)
         elif args.action == 'render':
             render(state, args.binary)

@@ -4,6 +4,7 @@ XRAY_TEST_BINARY, PAYLOADGATE_TEST_BINARY and TLSMUX_TEST_BINARY opt in.
 The loopback HTTP destination is explicitly allowed ONLY in the test config.
 """
 import contextlib
+import base64
 import copy
 import datetime
 import http.server
@@ -101,10 +102,13 @@ class XrayStreams(unittest.TestCase):
             fields = dict(line.split(':', 1) for line in subprocess.check_output([binary, 'x25519'], text=True).splitlines() if ':' in line)
             settings = dict(reality=dict(privateKey=fields['PrivateKey'].strip(), target='www.microsoft.com:443',
                                         serverName='www.microsoft.com', shortId='1234abcd'))
+            settings['shadowsocks'] = dict(port=8388, serverKey=base64.b64encode(b'server-test-key!').decode())
             gateway_port, tls_port, h2_port, h1_port = port(), port(), port(), port()
             settings['reality'].update(target=f'127.0.0.1:{tls_port}', serverName='localhost')
             users = {p: [dict(name='test', expiresAt='2099-01-01', uuid='11111111-1111-4111-8111-111111111111',
                              password='test-password')] for p in x.PROTOCOLS}
+            users['shadowsocks'][0]['password'] = base64.b64encode(b'client-test-key!').decode()
+            users['shadowsocks'].append(dict(name='second', expiresAt='2099-01-01', password=base64.b64encode(b'second-test-key!').decode()))
             server = x.configuration(settings, users)
             server['log']['loglevel'] = 'debug'
             server['routing']['rules'] = []  # Test fixture destination is loopback.
@@ -112,9 +116,11 @@ class XrayStreams(unittest.TestCase):
             routes, inbound_ports = {}, []
             for inbound in server['inbounds']:
                 inbound['port'] = port()
+                inbound['listen'] = '127.0.0.1'  # Isolate even the native SS listener.
                 inbound_ports.append(inbound['port'])
             for row, inbound in zip(x.TRANSPORTS, server['inbounds']):
-                routes[row[2]] = f'127.0.0.1:{inbound["port"]}'
+                if row[1] != 'grpc':
+                    routes[row[2]] = f'127.0.0.1:{inbound["port"]}'
             x.atomic(directory / 'server.json', server)
             x.atomic(directory / 'routes.json', routes)
             core = start([binary, 'run', '-config', str(directory / 'server.json')], 'server.log')
@@ -144,26 +150,35 @@ class XrayStreams(unittest.TestCase):
             thread.start()
             stack.callback(httpd.server_close)
             stack.callback(httpd.shutdown)
-            for protocol, network, path, _ in (*x.TRANSPORTS, ('vless', 'tcp', '', 0)):
-                for tls in ([True] if protocol == 'trojan' or network == 'tcp' else [False, True]):
+            extra_cases = (('vless', 'tcp', '', 0), ('shadowsocks', 'ss2022', '', 0), ('shadowsocks', 'ss2022-other', '', 0))
+            for protocol, network, path, _ in (*x.TRANSPORTS, *extra_cases):
+                for tls in ([False] if protocol == 'shadowsocks' else [True] if network == 'tcp' else x.tls_modes(protocol, network)):
                     with self.subTest(protocol=protocol, network=network, tls=tls):
                         socks = port()
                         user = {'password': 'test-password'} if protocol == 'trojan' else {'id': users[protocol][0]['uuid']}
                         stream = {'network': network, 'security': 'tls' if tls else 'none',
-                                  {'ws': 'wsSettings', 'httpupgrade': 'httpupgradeSettings', 'xhttp': 'xhttpSettings', 'tcp': 'tcpSettings'}[network]:
-                                  dict(path=path, **({'mode': 'auto'} if network == 'xhttp' else {}))}
+                                  {'ws': 'wsSettings', 'httpupgrade': 'httpupgradeSettings', 'xhttp': 'xhttpSettings', 'tcp': 'tcpSettings',
+                                   'grpc': 'grpcSettings', 'ss2022': 'tcpSettings', 'ss2022-other': 'tcpSettings'}[network]:
+                                  ({'serviceName': path.lstrip('/'), 'multiMode': False} if network == 'grpc'
+                                   else dict(path=path, **({'mode': 'auto'} if network == 'xhttp' else {})))}
                         if tls:
                             # Trust only the exact short-lived loopback fixture certificate.
                             stream['tlsSettings'] = dict(serverName='localhost', fingerprint='chrome', pinnedPeerCertSha256=cert.fingerprint(hashes.SHA256()).hex(),
-                                                         alpn=['h2', 'http/1.1'] if network == 'xhttp' else ['http/1.1'])
+                                                         alpn=['h2', 'http/1.1'] if network in ('xhttp', 'grpc') else ['http/1.1'])
                         destination = dict(address='127.0.0.1', port=tls_port if tls else gateway_port)
                         if network == 'tcp':
                             stream = {'network': 'tcp', 'security': 'reality', 'realitySettings': {
                                 'serverName': 'localhost', 'fingerprint': 'chrome', 'shortId': '1234abcd',
                                 'publicKey': fields['Password (PublicKey)'].strip(), 'spiderX': '/'}}
-                            destination['port'] = inbound_ports[-1]
+                            destination['port'] = next(i['port'] for i in server['inbounds'] if i['tag'] == 'vless-reality')
                             user['flow'] = 'xtls-rprx-vision'
-                        if protocol == 'trojan':
+                        if protocol == 'shadowsocks':
+                            destination['port'] = next(i['port'] for i in server['inbounds'] if i['tag'] == 'shadowsocks-2022')
+                            index = 1 if network.endswith('-other') else 0
+                            settings_out = {'servers': [dict(destination, method=x.SS_METHOD,
+                                            password=settings['shadowsocks']['serverKey'] + ':' + users['shadowsocks'][index]['password'])]}
+                            stream = {'network': 'tcp', 'security': 'none'}
+                        elif protocol == 'trojan':
                             settings_out = {'servers': [dict(destination, **user)]}
                         else:
                             settings_out = {'vnext': [dict(destination, users=[dict(user, encryption='none') if protocol == 'vless'
@@ -196,7 +211,7 @@ class XrayStreams(unittest.TestCase):
                                         data += chunk
                                     self.assertTrue(data.startswith(b'HTTP/1.0 200'), data[:100])
                                     self.assertEqual(data.split(b'\r\n\r\n', 1)[1], BODY)
-                            if network == 'xhttp' and tls:
+                            if network in ('xhttp', 'grpc') and tls:
                                 self.assertIn('HTTP/2.0', (directory / 'logs/access.log').read_text())
                         except Exception:
                             import traceback

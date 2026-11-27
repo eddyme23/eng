@@ -14,6 +14,26 @@ JQ = shutil.which("jq") or (str(ROOT.parent / "test-bin/jq.exe") if (ROOT.parent
 
 @unittest.skipUnless(BASH, "bash required")
 class MenuServicesTest(unittest.TestCase):
+    def test_main_menu_xray_is_seven_and_shifted_actions_still_dispatch(self):
+        source = (ROOT / 'menu-v6.sh').read_text(encoding='utf-8')
+        main = source[source.rindex('\nwhile true; do'):]
+        harness = ('RED= GREEN= YELLOW= BLUE= CYAN= WHITE= BOLD= NC=\n' + self.menu_functions()
+                   + '\nscript_dir=/fixture; load_runtime() { :; }; show_ports() { :; }; clear() { :; }; pause() { :; }; '
+                   + 'maintenance_menu() { echo SERVICE_CONTROLS; }; utilities_menu() { echo UTILITIES; }; '
+                   + 'settings_menu() { echo SETTINGS; }; reboot() { echo REBOOT; }; '
+                   + 'bash() { printf "CALL %s\\n" "$*"; };\n' + main)
+        for data, expected in [('07\n00\n', 'CALL /fixture/xray-menu.sh'),
+                               ('08\n00\n', 'CALL /fixture/maintenance-v6.sh monitor'),
+                               ('09\n00\n', 'SERVICE_CONTROLS'),
+                               ('10\n00\n', 'CALL /fixture/maintenance-v6.sh backup'),
+                               ('11\n00\n', 'UTILITIES'), ('12\n00\n', 'SETTINGS'),
+                               ('13\ny\n00\n', 'REBOOT')]:
+            with self.subTest(data=data):
+                result = self.run_shell(harness, data)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(expected, result.stdout)
+                self.assertIn('[07] Xray Account Management', result.stdout)
+
     def run_shell(self, code, data=""):
         with tempfile.TemporaryDirectory() as directory:
             script = Path(directory) / "check.sh"

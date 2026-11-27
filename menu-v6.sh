@@ -110,7 +110,12 @@ show_ports() {
   port_row 'UDPCustom:' '50001-65535 UDP' 'SocksIP:' '1195-3999 UDP'
   port_row 'OpenVPN:' '1194 TCP/UDP' 'OVPN SSL:' '8433'
   port_row 'OVPN WS:' '80,8080,8880,443 TLS' 'WireGuard:' '4000 UDP'
-  if [[ -s "$state_dir/xray-settings.json" ]]; then port_row 'Xray NTLS:' '80 TCP' 'Xray TLS:' '443 TCP'; fi
+  if [[ -s "$state_dir/xray-settings.json" ]]; then
+    local shadowsocks_port
+    port_row 'Xray NTLS:' '80 TCP' 'Xray TLS:' '443 TCP'
+    shadowsocks_port="$(jq -r '.shadowsocks.port // empty' "$state_dir/xray-settings.json")"
+    if [[ $shadowsocks_port =~ ^[0-9]+$ ]]; then port_row 'gRPC TLS:' '443 TCP' 'SS2022:' "$shadowsocks_port TCP"; fi
+  fi
   port_row 'BHTTP:' "$(if [[ -r "$state_dir/bhttp.env" ]]; then source "$state_dir/bhttp.env"; ports="${BHTTP_PORTS:-$BHTTP_PORT}"; printf '%s TCP' "${ports// /, }"; else printf 'not installed'; fi)" 'HCR:' '8881 NTLS / 8444 TLS'
   printf '%b-------------------------- SYSTEM RESOURCES -------------------------%b\n' "$RED" "$NC"
   printf '  %bRAM Used:%b  %-15s  %bCPU Used:%b  %-13s  %bBuffer:%b  %s\n' "$WHITE" "$NC" "$ram" "$WHITE" "$NC" "$cpu" "$WHITE" "$NC" "$buffer"
@@ -292,13 +297,13 @@ while true; do
   item 4 'WireGuard Account Management (UDP)'
   item 5 'OpenVPN Account Management (OpenVPN3)'
   item 6 'ZiVPN Account Management (UDP)'
-  item 7 'Monitor Active Connections'
-  item 8 'Service Controls (restart protocols)'
-  item 9 'Create Frimps Backup'
-  item 10 'System Utilities (BBR / Netflix)'
-  item 11 'Advanced Settings (domain / obfuscation)'
-  item 12 'Reboot Server'
-  item 13 'Xray Account Management (VLESS / VMess / Trojan)'
+  item 7 'Xray Account Management (VLESS / VMess / Trojan / Shadowsocks)'
+  item 8 'Monitor Active Connections'
+  item 9 'Service Controls (restart protocols)'
+  item 10 'Create Frimps Backup'
+  item 11 'System Utilities (BBR / Netflix)'
+  item 12 'Advanced Settings (domain / obfuscation)'
+  item 13 'Reboot Server'
   printf '  [%b00%b] %bExit%b\n' "$RED" "$NC" "$BOLD" "$NC"
   echo
   read_menu_option choice '  ► Select an option: ' || exit 0
@@ -309,13 +314,13 @@ while true; do
     4) wireguard_menu ;;
     5) openvpn_menu ;;
     6) zivpn_menu ;;
-    7) bash "$script_dir/maintenance-v6.sh" monitor; pause ;;
-    8) maintenance_menu ;;
-    9) bash "$script_dir/maintenance-v6.sh" backup; pause ;;
-    10) utilities_menu ;;
-    11) settings_menu ;;
-    12) read -r -p 'Reboot server now? [y/N] ' confirm; [[ "$confirm" =~ ^[Yy]$ ]] && reboot ;;
-    13) bash "$script_dir/xray-menu.sh" ;;
+    7) bash "$script_dir/xray-menu.sh" ;;
+    8) bash "$script_dir/maintenance-v6.sh" monitor; pause ;;
+    9) maintenance_menu ;;
+    10) bash "$script_dir/maintenance-v6.sh" backup; pause ;;
+    11) utilities_menu ;;
+    12) settings_menu ;;
+    13) read -r -p 'Reboot server now? [y/N] ' confirm; [[ "$confirm" =~ ^[Yy]$ ]] && reboot ;;
     0) exit 0 ;;
     *) echo 'Invalid option.'; sleep 1 ;;
   esac

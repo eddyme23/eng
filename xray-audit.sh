@@ -6,9 +6,13 @@ systemctl is-active --quiet frimps-xray.service
 systemctl is-enabled --quiet frimps-xray-cleanup.timer
 systemctl is-active --quiet frimps-xray-cleanup.timer
 /usr/local/libexec/frimps-xray run -test -config "$state_dir/xray.json"
-for port in 13101 13102 13103 13104 13105 13106 13107; do
+for port in 13101 13102 13103 13104 13105 13106 13107 13108 13109 13110; do
   ss -H -ltn "( sport = :$port )" | grep -q '127.0.0.1:' || { echo "Missing loopback Xray listener $port" >&2; exit 1; }
 done
+if jq -e 'any(.inbounds[]; .tag == "shadowsocks-2022")' "$state_dir/xray.json" >/dev/null; then
+  port=$(jq -r '.inbounds[] | select(.tag == "shadowsocks-2022") | .port' "$state_dir/xray.json")
+  ss -H -ltn "( sport = :$port )" | grep -q . || { echo "Missing Shadowsocks TCP listener $port" >&2; exit 1; }
+fi
 haproxy -c -f /etc/haproxy/haproxy.cfg
 nginx -t
 echo 'Xray configuration, loopback listeners and boot/expiry services passed.'

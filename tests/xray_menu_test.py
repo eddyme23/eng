@@ -27,7 +27,7 @@ systemctl() { printf 'SERVICE %s\\n' "$*"; }
             return result
 
     def test_back_and_eof_at_both_levels(self):
-        for data in ['0\n', '00\n', '', '01\n00\n00\n', '02\n0\n0\n', '03\n']:
+        for data in ['0\n', '00\n', '', '01\n00\n00\n', '02\n0\n0\n', '03\n', '04\n00\n00\n']:
             result = self.run_menu(data)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertNotIn('Invalid option', result.stdout)
@@ -40,6 +40,8 @@ systemctl() { printf 'SERVICE %s\\n' "$*"; }
             ('3\n3\n01\ny\n\n0\n0\n', 'delete trojan customer'),
             ('1\n4\n\n0\n0\n', 'list vless'),
             ('1\n5\n01\n\n0\n0\n', 'links vless customer'),
+            ('4\n1\n12345\n30\n\n0\n0\n', 'create shadowsocks 12345 30'),
+            ('4\n5\n01\n\n0\n0\n', 'links shadowsocks customer'),
         ]:
             result = self.run_menu(data)
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -51,6 +53,12 @@ systemctl() { printf 'SERVICE %s\\n' "$*"; }
             self.assertNotIn('xray-accounts.sh delete', result.stdout)
         result = self.run_menu('1\n3\n1\nn\n\n0\n0\n')
         self.assertNotIn('xray-accounts.sh delete', result.stdout)
+
+    def test_status_and_restart_moved_below_shadowsocks(self):
+        for choice, expected in [('05', 'SERVICE status frimps-xray --no-pager'), ('06', 'SERVICE restart frimps-xray')]:
+            result = self.run_menu(choice + '\n\n00\n')
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(expected, result.stdout)
 
 
 if __name__ == '__main__':

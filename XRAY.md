@@ -1,8 +1,9 @@
 # Xray in ENG
 
 ENG runs its own pinned Xray-core v26.10.31 binary and `frimps-xray.service`.
-It does not replace a separately installed `xray` service. All seven Xray
-listeners bind to loopback; the existing ENG gateway owns public ports.
+It does not replace a separately installed `xray` service. HTTP and REALITY
+listeners bind to loopback; the existing ENG gateway owns ports 80/443.
+Native Shadowsocks uses its own public TCP listener after an account is created.
 
 | Protocol | Transport | Direct NTLS | TLS | Path |
 |---|---|---|---|---|
@@ -13,6 +14,23 @@ listeners bind to loopback; the existing ENG gateway owns public ports.
 | VMess | HTTPUpgrade | 80 | 443 | `/vmess-upgrade` |
 | Trojan | WebSocket | not exported | 443 | `/trojan-ws` |
 | VLESS | TCP + REALITY + Vision | — | 443 | no HTTP path |
+| VLESS | gRPC | — | 443 | service `vless-grpc` |
+| VMess | gRPC | — | 443 | service `vmess-grpc` |
+| Trojan | gRPC | — | 443 | service `trojan-grpc` |
+| Shadowsocks 2022 | native TCP | 8388 | no outer TLS | no HTTP path |
+
+gRPC uses HTTP/2, ALPN `h2` and nginx `grpc_pass`. Its service-name prefixes
+are separate from existing WebSocket/XHTTP/OpenVPN paths. No gRPC NTLS links
+are exported. XHTTP remains the preferred newer HTTP transport; gRPC is an
+additional compatibility option.
+
+Shadowsocks uses `2022-blake3-aes-128-gcm`, a persistent server key and a separate
+random key per account. Its `ss://` link includes both keys in the standard
+`ServerKey:UserKey` password format. TCP 8388 must be allowed in provider/host
+firewalls and use a DNS-only/direct hostname. It cannot use Cloudflare's ordinary
+HTTP proxy. No native UDP listener or UDP firewall range is added. With no active
+Shadowsocks accounts, the listener is omitted to prevent single-user server-key
+fallback after the last account expires or is deleted.
 
 The port-80 modes have no outer TLS. Ordinary VLESS NTLS has no encryption;
 VMess uses its own protocol encryption. Prefer TLS or REALITY when possible.
@@ -65,10 +83,10 @@ ClientHello. Other SNI values retain the existing TLS multiplexer route.
 
 ## Accounts and Gen
 
-Open menu option 13, Xray Account Management. Choose VLESS, VMess or Trojan;
+Open menu option 7, Xray Account Management. Choose VLESS, VMess, Trojan or Shadowsocks;
 create, renew, delete, list and export links are available. Numeric names are
 supported, and existing account selection uses numbered lists with 0/00 Back.
-Each protocol has its own accounts. Renewal keeps its UUID/password. Deletion
+Each protocol has its own accounts. Renewal keeps its UUID/password/key. Deletion
 and expiry remove it from Xray; they do not delete SSH accounts. Account updates
 restart Xray and disconnect its existing sessions. Expiry dates are inclusive
 UTC dates; the persistent timer cleans expired accounts at 00:01 UTC daily.
@@ -81,14 +99,27 @@ bash ./xray-accounts.sh links vless eddy
 bash ./xray-accounts.sh renew vless eddy 60
 bash ./xray-accounts.sh list vmess
 bash ./xray-accounts.sh delete trojan eddy
+bash ./xray-accounts.sh create shadowsocks eddy 30
+bash ./xray-accounts.sh links shadowsocks eddy
 ```
 
-Exported links contain private UUIDs/passwords. Put the appropriate link into
+Exported links contain private UUIDs/passwords/keys. For VLESS, VMess and Trojan, put the appropriate link into
 the Gen's existing V2Ray port-80 or port-443 server field. Each field holds one
 chosen configuration, so separate server entries can expose different transports.
 All four checked apps already have HTTPUpgrade/XHTTP parsing and configuration;
 their Gens preserve these server-link fields. No SSH certificate bundle changes
 are required; Xray accounts authenticate separately.
+
+The checked Android apps have gRPC and Shadowsocks parsers, but their standard
+Gen/template policy currently accepts only VLESS, VMess and Trojan. Shadowsocks
+therefore needs separate app/Gen template alignment before distribution through
+those Gens; use a compatible Shadowsocks 2022 client for initial server testing.
+No Android source or binaries are modified by this ENG update.
+
+On the first Xray install, `--shadowsocks-port 8388` can choose another unused TCP
+port above 1023. Subsequent installs preserve that selection, its server key and
+every existing account. Run `xray-install.sh` for this upgrade so the gRPC nginx
+locations, normalized account store and Shadowsocks settings are all installed.
 
 ## Preservation and verification
 
@@ -109,11 +140,10 @@ or browsing. Test each advertised link on a live VPS, including XHTTP over
 negotiated HTTP/2, REALITY target reachability, reconnects and existing protocols.
 Cloudflare proxy tests are separate from the direct DNS-only deployment.
 
-Local validation for this change: 20 Xray tests and 19 existing routing, menu,
-health and firewall tests passed, together with the payloadgate, tlsmux and
-sshws Go test packages. Real Xray v26.10.31 and nginx 1.26.3 loopback tests
-authenticated and transferred data twice through all 12 advertised combinations
-(24 sessions), including XHTTP/TLS over HTTP/2 and REALITY/Vision. TLS tests used
+Real Xray v26.10.31 and nginx 1.26.3 loopback tests authenticate and transfer data
+twice through all 16 advertised combinations, plus a second independent
+Shadowsocks identity (34 sessions), including gRPC/TLS and XHTTP/TLS over HTTP/2,
+REALITY/Vision and native Shadowsocks 2022. TLS tests use
 an explicitly pinned temporary certificate and the exported Chrome fingerprint.
 Fresh/upgrade/rollback shell tests use private filesystem fixtures and simulated
 systemd commands; Linux permissions, actual boot ordering and provider networking
