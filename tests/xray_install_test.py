@@ -68,6 +68,11 @@ install() {
 }
 cp() {
  local arg; local -a arguments=()
+ # Regression: backup must work without GNU cp's parent-directory traversal.
+ # This recreates the VPS failure if the installer reintroduces --parents.
+ for arg in "$@"; do
+  if [[ $arg == --parents ]]; then echo 'cp: etc/frimps-v6: No such file or directory' >&2; return 1; fi
+ done
  for arg in "$@"; do [[ $arg == -a ]] || arguments+=("$arg"); done
  command cp "${arguments[@]}"
 }

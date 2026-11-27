@@ -5,6 +5,7 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 state_dir="${V6_STATE_DIR:-/etc/frimps-v6}"
 export V6_STATE_DIR="$state_dir"
+[[ $state_dir == /* ]] || { echo 'V6_STATE_DIR must be an absolute path.' >&2; exit 1; }
 for command in python3 curl jq unzip sha256sum go haproxy nginx systemctl flock; do
   command -v "$command" >/dev/null || { echo "Missing prerequisite: $command" >&2; exit 1; }
 done
@@ -33,11 +34,18 @@ install -d -m 700 "$backup"
 files=("$state_dir/xray-settings.json" "$state_dir/xray-users.json" "$state_dir/xray.json" "$state_dir/xray-routes.json" "$state_dir/backends.json" "$state_dir/haproxy-443.cfg" "$state_dir/nginx-main-tls.conf" /etc/haproxy/haproxy.cfg /etc/nginx/conf.d/frimps-v6-main.conf /usr/local/libexec/frimps-xray /usr/local/libexec/frimps-v6-payloadgate /etc/systemd/system/frimps-xray.service /etc/systemd/system/frimps-xray-cleanup.service /etc/systemd/system/frimps-xray-cleanup.timer /usr/local/lib/frimps-v6/xray-manager.py /usr/local/lib/frimps-v6/xray-accounts.sh /usr/local/lib/frimps-v6/xray-menu.sh)
 touch "$backup/active" "$backup/enabled"
 for unit in frimps-xray.service frimps-xray-cleanup.timer; do
+  systemctl cat "$unit" >/dev/null 2>&1 || continue
   if systemctl is-active --quiet "$unit"; then echo "$unit" >> "$backup/active"; fi
   if systemctl is-enabled --quiet "$unit"; then echo "$unit" >> "$backup/enabled"; fi
 done
 for file in "${files[@]}"; do
-  if [[ -e $file ]]; then cp -a --parents -- "$file" "$backup"; else printf '%s\n' "$file" >> "$backup/absent"; fi
+  if [[ -e $file || -L $file ]]; then
+    # Create snapshot parents explicitly. GNU cp --parents also copies parent
+    # directory attributes and can fail when the source hierarchy uses aliases.
+    # Backup layout remains absolute-path based, as required by rollback below.
+    install -d -m 700 -- "$(dirname -- "$backup$file")"
+    cp -a -- "$file" "$backup$file"
+  else printf '%s\n' "$file" >> "$backup/absent"; fi
 done
 rollback() {
   trap - ERR INT TERM
@@ -47,7 +55,7 @@ rollback() {
     if ! grep -qxF "$unit" "$backup/enabled"; then systemctl disable "$unit" 2>/dev/null || true; fi
   done
   for file in "${files[@]}"; do
-    if [[ -e "$backup$file" ]]; then
+    if [[ -e "$backup$file" || -L "$backup$file" ]]; then
       cp -a -- "$backup$file" "$file.eng-xray-restore-$$"
       mv -f -- "$file.eng-xray-restore-$$" "$file"
     else rm -f -- "$file"; fi

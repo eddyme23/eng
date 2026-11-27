@@ -24,13 +24,16 @@ permission to carry traffic under a provider's terms.
 Run from the updated ENG checkout after backing up managed state:
 
 ```bash
-cd /root/eng
-git pull --ff-only origin main
-bash ./xray-install.sh
-bash ./refresh-menu-v6.sh
+cd /root/eng &&
+git pull --ff-only origin main &&
+bash ./xray-install.sh &&
+bash ./refresh-menu-v6.sh &&
 bash ./xray-audit.sh
-bash ./protocol-health-v6.sh --live
 ```
+
+These commands stop if installation fails. After a successful Xray audit, run
+`bash ./protocol-health-v6.sh --live` to check the other protocols too. A menu
+refresh alone does not install an absent Xray service.
 
 The installer requires ENG's existing Go, Python, curl, jq, unzip, HAProxy and
 nginx prerequisites. It verifies the pinned release archive SHA256 before
