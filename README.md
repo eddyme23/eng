@@ -1,5 +1,7 @@
 # Multi Script
 
+Optional browser account management: [ENG administration panel](PANEL.md).
+
 Debian 12 Recommended; run as root. The installer requests a TLS certificate for the primary domain only, using Cloudflare DNS validation.
 
 Installation:
