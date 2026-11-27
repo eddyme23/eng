@@ -110,11 +110,14 @@ All four checked apps already have HTTPUpgrade/XHTTP parsing and configuration;
 their Gens preserve these server-link fields. No SSH certificate bundle changes
 are required; Xray accounts authenticate separately.
 
-The checked Android apps have gRPC and Shadowsocks parsers, but their standard
-Gen/template policy currently accepts only VLESS, VMess and Trojan. Shadowsocks
-therefore needs separate app/Gen template alignment before distribution through
-those Gens; use a compatible Shadowsocks 2022 client for initial server testing.
-No Android source or binaries are modified by this ENG update.
+Use SS-aware app and Gen builds for Shadowsocks templates. The TG/GT/GV/VC
+Desktop source pairs were aligned on 2026-11-27; older builds may still reject
+`ss://` in standard templates. Put the link in `V2ray80` and use a direct-host
+`@80` standard tweak with Reverse/Dual off. The slot selects the stored profile;
+the actual TCP port (8388 by default) is retained. Native Shadowsocks does not
+use SNI/HTTP Host overrides or Google Cloud TLS mode. These Android source
+changes require separate app/Gen release builds and phone verification; ENG
+installation alone does not update an installed Android app.
 
 On the first Xray install, `--shadowsocks-port 8388` can choose another unused TCP
 port above 1023. Subsequent installs preserve that selection, its server key and
