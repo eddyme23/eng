@@ -4,6 +4,12 @@ The panel is optional, one administrator and one VPS per installation. It reuses
 the terminal account managers and their existing locks, expiry and rendering.
 It does not install another VPN manager or replace the gateways on 80/443.
 
+The responsive interface has sidebar navigation, grouped account forms and a
+separate results area with copy, download and clear controls. On phones the
+layout stacks into a single column. No external frontend framework or CDN is
+required. Clearing results removes the displayed credentials from the panel;
+it does not remove copies you have downloaded or placed on the clipboard.
+
 ## Install on an existing or freshly installed ENG VPS
 
 Use Debian 12 with ENG already installed and a working Let's Encrypt certificate

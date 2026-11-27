@@ -1,11 +1,50 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ENG administration</title><link rel="stylesheet" href="/panel.css"><script src="/panel.js" defer></script></head>
-<body><main><header><h1>ENG administration</h1><button id="logout" hidden>Sign out</button></header>
-<form id="login"><h2>Administrator sign in</h2><label>Username<input id="admin" autocomplete="username" required></label><label>Password<input id="secret" type="password" autocomplete="current-password" required></label><button>Sign in</button></form>
-<section id="workspace" hidden><p>Changes use the same accounts as the terminal menu. Keep exported credentials private.</p>
-<button id="status">Service status</button><form id="accounts"><label>Account system<select id="protocol">
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<aside class="sidebar" aria-label="Panel navigation">
+  <a class="brand" href="/" aria-label="ENG home"><span class="brand-mark">E</span><span>ENG<span class="brand-caption">SERVER MANAGER</span></span></a>
+  <div class="sidebar-section">WORKSPACE</div>
+  <nav><a href="#accounts" class="nav-link"><span aria-hidden="true">▤</span><span class="nav-label">Account management</span></a><a href="#results" class="nav-link"><span aria-hidden="true">≡</span><span class="nav-label">Results &amp; exports</span></a></nav>
+  <div class="sidebar-note"><span class="eyebrow">ONE VPS. ONE WORKSPACE.</span><p>Manage your ENG accounts in one place.</p><span class="outline-tag">Administrator panel</span></div>
+  <div class="sidebar-footer">ENG administration<span>Private access · HTTPS</span></div>
+</aside>
+<main id="main">
+  <header class="topbar"><span class="breadcrumb">Workspace <span>/</span> Server management</span><button id="logout" class="button secondary small" hidden>Sign out</button></header>
+  <div class="page-heading"><div><span class="eyebrow accent">ENG CONTROL PANEL</span><h1>Your server, organized.</h1><p>Accounts, connection details and service status.</p></div><span class="outline-tag security-tag">HTTPS access</span></div>
+  <form id="login" class="card login-card">
+    <div class="card-heading"><span class="section-number">01</span><div><h2>Welcome back</h2><p>Sign in to manage this VPS.</p></div></div>
+    <label>Administrator name<input id="admin" autocomplete="username" placeholder="Your administrator name" required></label>
+    <label>Password<input id="secret" type="password" autocomplete="current-password" placeholder="Enter your password" required></label>
+    <button class="button primary">Sign in to workspace <span aria-hidden="true">→</span></button>
+    <p class="fine-print">Use your panel login, separate from your VPN accounts.</p>
+  </form>
+  <section id="workspace" hidden>
+    <div class="workspace-strip"><div><span class="strip-icon" aria-hidden="true">↔</span><span><strong>Connected to your ENG account tools</strong><small>The panel and terminal menu manage the same accounts.</small></span></div><button id="status" class="button secondary">Check service status <span aria-hidden="true">↗</span></button></div>
+    <div class="management-grid">
+      <section class="card account-card" aria-labelledby="account-title">
+        <div class="card-heading"><span class="section-number">01</span><div><h2 id="account-title">Account management</h2><p>Choose a service and the action you need.</p></div></div>
+        <form id="accounts"><div class="form-grid"><label>Account system<select id="protocol">
 <option value="ssh">SSH protocols</option><option value="hysteria1">Hysteria 1</option><option value="hysteria2">Hysteria 2</option><option value="zivpn">ZiVPN (name is the password)</option><option value="openvpn">OpenVPN</option><option value="wireguard">WireGuard</option><option value="combined">Combined Xray accounts</option><option value="vless">VLESS</option><option value="vmess">VMess</option><option value="trojan">Trojan</option><option value="shadowsocks">Shadowsocks 2022</option>
-</select></label><label id="auth-field">Account authentication<select id="auth"><option value="ssh">Username and password</option><option value="certificate">App certificate</option></select></label><p id="account-help"></p><label>Operation<select id="action"><option value="list">List accounts</option><option value="create">Create account</option><option value="renew">Renew account</option><option value="delete">Delete account and its identities</option><option value="export">Export credentials / profile</option><option value="share">Export public certificate authorization</option></select></label>
-<label id="name-field">Account name<input id="name" maxlength="32" pattern="[a-z0-9_][a-z0-9_-]{0,31}" autocomplete="off"></label><label id="days-field">Validity (days)<input id="days" type="number" min="1" max="3650" value="30" required></label><label id="password-field">Password<input id="password" type="password" autocomplete="new-password" maxlength="128"></label><button id="run">Run operation</button></form>
-<p>Certificate exports contain private keys. SSH passwords cannot be retrieved after creation. UDP Custom shares the password SSH account. Exports: Xray links, certificate JSON, Hysteria 2 URI, Hysteria 1/ZiVPN details, WireGuard config or OpenVPN UDP profile.</p><button id="download" disabled>Download last result</button></section>
-<p id="message" role="status"></p><pre id="output" tabindex="0"></pre></main></body></html>
+</select></label><label id="auth-field">Account authentication<select id="auth"><option value="ssh">Username and password</option><option value="certificate">App certificate</option></select></label></div>
+        <p id="account-help" class="context-note"></p>
+        <label>Operation<select id="action"><option value="list">List accounts</option><option value="create">Create account</option><option value="renew">Renew account</option><option value="delete">Delete account and its identities</option><option value="export">Export credentials / profile</option><option value="share">Export public certificate authorization</option></select></label>
+        <div class="form-grid"><label id="name-field">Account name<input id="name" maxlength="32" pattern="[a-z0-9_][a-z0-9_-]{0,31}" autocomplete="off" placeholder="e.g. eddy"></label><label id="days-field">Validity (days)<input id="days" type="number" min="1" max="3650" value="30" required></label></div>
+        <label id="password-field">Password<input id="password" type="password" autocomplete="new-password" maxlength="128" placeholder="Set the account password"></label>
+        <div class="form-footer"><span>Applies to this VPS</span><button id="run" class="button primary">Run operation <span aria-hidden="true">→</span></button></div></form>
+      </section>
+      <aside class="guide-card" aria-label="Account guidance"><span class="eyebrow">QUICK GUIDE</span><h3>A clearer way to manage access.</h3>
+        <div class="guide-item"><span>01</span><div><h4>Choose your account</h4><p>SSH protocols share one section. Select password or app certificate authentication.</p></div></div>
+        <div class="guide-item"><span>02</span><div><h4>Make your change</h4><p>Create, renew or remove accounts using the same ENG tools as your terminal.</p></div></div>
+        <div class="guide-item"><span>03</span><div><h4>Keep the details</h4><p>Copy or download connection output. Certificate exports contain private keys.</p></div></div>
+        <div class="privacy-note">SSH passwords cannot be retrieved after creation. Keep exported credentials private.</div>
+      </aside>
+    </div>
+  </section>
+  <section id="results" class="card results-card" aria-labelledby="results-title">
+    <div class="result-heading"><div><span class="eyebrow">OPERATION OUTPUT</span><h2 id="results-title">Results &amp; exports</h2></div><div class="result-actions"><button id="copy" class="button secondary small" disabled>Copy</button><button id="download" class="button secondary small" disabled>Download</button><button id="clear" class="button ghost small" disabled>Clear</button></div></div>
+    <p id="message" role="status" aria-live="polite">Sign in to begin.</p><pre id="output" tabindex="0" aria-label="Operation result"></pre>
+    <div class="result-footnote">Connection profiles and private bundles appear here after you request them.</div>
+  </section>
+  <footer class="page-footer"><span>ENG Server Manager</span><span>Account changes apply immediately.</span></footer>
+</main></body></html>

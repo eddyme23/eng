@@ -6,14 +6,14 @@ const vm = require('node:vm');
 const path = require('node:path');
 const ids = ['login','workspace','logout','protocol','auth','auth-field','action',
   'account-help','name-field','name','days-field','days','password-field','password',
-  'run','download','output','message','admin','secret','accounts','status'];
+  'run','download','copy','clear','output','message','admin','secret','accounts','status'];
 const nodes = Object.fromEntries(ids.map(id=>[id,{value:'',hidden:false,disabled:false,textContent:''}]));
 nodes.protocol.value='ssh'; nodes.auth.value='ssh'; nodes.action.value='list'; nodes.days.value='30';
 nodes.action.options=['list','create','renew','delete','export','share'].map(value=>({value}));
-const calls=[];
+const calls=[]; let clipboard='';
 const context=vm.createContext({document:{getElementById:id=>nodes[id]}, confirm:()=>true,
   fetch:async(url, options)=>{if(options)calls.push({url,data:JSON.parse(options.body)});return {ok:true,status:200,json:async()=>({csrf:'token',output:'test output'})};},
-  URL,Blob,setTimeout,console});
+  URL,Blob,setTimeout,console,navigator:{clipboard:{writeText:async text=>{clipboard=text;}}}});
 vm.runInContext(fs.readFileSync(path.join(__dirname,'../panel.js'),'utf8'),context);
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 async function main(){
@@ -27,6 +27,13 @@ async function main(){
   nodes.accounts.onsubmit({preventDefault(){}});await tick();
   assert.equal(calls.at(-1).data.protocol,'ssh');
   assert.equal(calls.at(-1).data.password,'password123');
+  assert.equal(nodes.copy.disabled,false);
+  await nodes.copy.onclick();
+  assert.equal(clipboard,'test output');
+  nodes.clear.onclick();
+  assert.equal(nodes.output.textContent,'');
+  assert.equal(nodes.copy.disabled,true);
+  assert.equal(nodes.download.disabled,true);
   nodes.password.value='do-not-reuse';nodes.auth.value='certificate';nodes.auth.onchange();
   assert.equal(nodes.password.value,'');
   assert.equal(nodes.password.disabled,true);
@@ -48,6 +55,19 @@ async function main(){
   nodes.accounts.onsubmit({preventDefault(){}});await tick();
   assert.equal(calls.at(-1).data.protocol,'openvpn');
   assert.equal(calls.at(-1).data.password,'openvpnpass');
+  let finishRequest;
+  context.fetch=async(url)=>{
+    if(url==='/api/action')return new Promise(resolve=>{finishRequest=()=>resolve({ok:true,status:200,json:async()=>({output:'private result'})});});
+    return {ok:true,status:200,json:async()=>({})};
+  };
+  const pending=context.operate({action:'status'});
+  await tick();
+  assert.equal(nodes.protocol.disabled,true);
+  await nodes.logout.onclick();
+  finishRequest(); await pending;
+  assert.equal(nodes.output.textContent,'');
+  assert.equal(nodes.copy.disabled,true);
+  assert.equal(nodes.workspace.hidden,true);
   console.log('Panel UI routing and field checks passed.');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

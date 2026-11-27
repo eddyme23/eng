@@ -1,6 +1,10 @@
 'use strict';
 const byId = id => document.getElementById(id);
-let csrf = '', lastOutput = '', busy = false;
+let csrf = '', lastOutput = '', busy = false, viewEpoch = 0;
+function clearOutput() {
+  lastOutput = ''; byId('output').textContent = '';
+  for (const id of ['download','copy','clear']) byId(id).disabled = true;
+}
 function selectedProtocol() {
   return byId('protocol').value === 'ssh' ? byId('auth').value : byId('protocol').value;
 }
@@ -25,13 +29,17 @@ function updateFields() {
     : 'This section uses its existing ENG account manager.';
 }
 function changeAccountSystem() {
-  byId('password').value = ''; lastOutput = ''; byId('output').textContent = ''; byId('download').disabled = true;
+  byId('password').value = ''; viewEpoch++; clearOutput();
   updateFields();
 }
 byId('protocol').onchange = changeAccountSystem;
 byId('auth').onchange = changeAccountSystem;
 byId('action').onchange = updateFields;
-function signedIn(value) { byId('login').hidden = value; byId('workspace').hidden = !value; byId('logout').hidden = !value; }
+function signedIn(value) {
+  byId('login').hidden = value; byId('workspace').hidden = !value; byId('logout').hidden = !value;
+  if (!value) { viewEpoch++; clearOutput(); }
+  else if (byId('message').textContent === 'Sign in to begin.') byId('message').textContent = 'Ready. Choose an account operation or check service status.';
+}
 async function request(path, data) {
   const options = data === undefined ? {} : {method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify(data)};
   const response = await fetch(path, options);
@@ -48,11 +56,22 @@ byId('login').onsubmit = async event => {
 };
 async function operate(data) {
   if (busy) return;
-  busy=true; byId('run').disabled=true; byId('message').textContent='Working…';
-  lastOutput=''; byId('output').textContent=''; byId('download').disabled=true;
-  try { const result=await request('/api/action',data); lastOutput=result.output; byId('output').textContent=lastOutput; byId('download').disabled=false; byId('message').textContent='Completed.'; }
-  catch (error) { byId('message').textContent=error.message; }
-  finally { busy=false; byId('run').disabled=false; byId('password').value=''; }
+  busy=true; const epoch=viewEpoch;
+  for (const id of ['run','protocol','auth','action','status']) byId(id).disabled=true;
+  byId('message').textContent='Working…'; clearOutput();
+  try {
+    const result=await request('/api/action',data);
+    if (epoch !== viewEpoch) return;
+    lastOutput=result.output; byId('output').textContent=lastOutput;
+    for (const id of ['download','copy','clear']) byId(id).disabled=!lastOutput;
+    byId('message').textContent='Completed.';
+  }
+  catch (error) { if (epoch === viewEpoch) byId('message').textContent=error.message; }
+  finally {
+    busy=false;
+    for (const id of ['run','protocol','auth','action','status']) byId(id).disabled=false;
+    byId('password').value='';
+  }
 }
 byId('accounts').onsubmit = event => {
   event.preventDefault();
@@ -63,7 +82,13 @@ byId('accounts').onsubmit = event => {
   operate(data);
 };
 byId('status').onclick=()=>operate({action:'status'});
-byId('logout').onclick=async()=>{ try{await request('/api/logout',{});}finally{csrf='';lastOutput='';byId('output').textContent='';byId('download').disabled=true;signedIn(false);} };
+byId('logout').onclick=async()=>{ try{await request('/api/logout',{});}finally{csrf='';signedIn(false);byId('message').textContent='Signed out.';} };
+byId('copy').onclick=async()=>{
+  if (!lastOutput) return;
+  try { await navigator.clipboard.writeText(lastOutput); byId('message').textContent='Copied to clipboard.'; }
+  catch { byId('message').textContent='Clipboard access unavailable. Select the result to copy it manually.'; }
+};
+byId('clear').onclick=()=>{clearOutput();byId('message').textContent='Result cleared.';};
 byId('download').onclick=()=>{const url=URL.createObjectURL(new Blob([lastOutput],{type:'text/plain'}));const a=document.createElement('a');a.href=url;a.download='eng-account-export.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 updateFields();
 request('/api/session').then(result=>{csrf=result.csrf;signedIn(true);}).catch(()=>signedIn(false));
