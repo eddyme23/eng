@@ -249,9 +249,9 @@ def links(settings, protocol, user):
 
 def display_links(settings, protocol, user):
     """Human-readable blocks; individual URI lines remain byte-for-byte intact."""
-    blocks = []
+    records = []
     names = {'ws': 'WebSocket', 'httpupgrade': 'HTTPUpgrade', 'xhttp': 'XHTTP', 'grpc': 'gRPC', 'tcp': 'TCP'}
-    for number, link in enumerate(links(settings, protocol, user), 1):
+    for link in links(settings, protocol, user):
         if protocol == 'vmess':
             data = json.loads(base64.b64decode(link[8:]))
             network, security, port = data['net'], 'TLS' if data['tls'] else 'NTLS', data['port']
@@ -263,7 +263,24 @@ def display_links(settings, protocol, user):
             network, security, port = query['type'][0], query['security'][0].upper(), uri.port
             if security == 'NONE':
                 security = 'NTLS'
-        blocks.append(f'[{number:02d}] {protocol.upper()} / {names[network]} / {security} / {port}\n{link}')
+        role = ''
+        if protocol == 'vless' and security == 'REALITY':
+            priority, role = 0, 'Recommended direct'
+        elif protocol == 'vless' and network == 'xhttp' and security == 'TLS':
+            priority, role = 1, 'Preferred HTTP transport'
+        elif network == 'ws' and security == 'TLS':
+            priority, role = 2, 'Compatibility fallback' if protocol == 'vless' else 'Compatibility'
+        else:
+            priority = (3 if security == 'TLS' else 10) + {'httpupgrade': 0, 'grpc': 1, 'xhttp': 2, 'ws': 3, 'tcp': 4}[network]
+        records.append((priority, network, security, port, role, link))
+    # Python's stable sort retains the original relative order of equal ranks.
+    records.sort(key=lambda row: row[0])
+    blocks = []
+    for number, (_, network, security, port, role, link) in enumerate(records, 1):
+        label = f'[{number:02d}] {protocol.upper()} / {names[network]} / {security} / {port}'
+        if role:
+            label += ' - ' + role
+        blocks.append(label + '\n' + link)
     return '\n\n'.join(blocks)
 
 

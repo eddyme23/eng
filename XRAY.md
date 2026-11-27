@@ -121,6 +121,14 @@ bash ./xray-accounts.sh links shadowsocks eddy
 Each exported link is displayed in its own labeled block with a blank line
 between blocks. Copy the URI line into the client or Gen; whitespace is never
 inserted inside the URI. Exported links contain private UUIDs/passwords/keys.
+VLESS output presents REALITY/Vision first (direct), XHTTP + TLS second (HTTP),
+and WebSocket + TLS third (compatibility). Remaining TLS and NTLS options remain
+available. VMess and Trojan display TLS WebSocket before their other options.
+This presentation expresses a recommended starting point, not a carrier speed
+ranking, automatic fallback or a change to existing client profiles. gRPC uses
+its own HTTP/2 multiplexing; leave additional Xray Mux off in clients. The four
+Desktop Android apps also disable extra Mux when generating standard gRPC
+profiles, as they already do for XHTTP; this requires rebuilt app releases.
 For VLESS, VMess and Trojan, put the appropriate link into
 the Gen's existing V2Ray port-80 or port-443 server field. Each field holds one
 chosen configuration, so separate server entries can expose different transports.

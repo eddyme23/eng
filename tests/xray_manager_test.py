@@ -74,9 +74,23 @@ class XrayManagerTest(unittest.TestCase):
             raw = list(x.links(SETTINGS, protocol, USERS[protocol][0]))
             output = x.display_links(SETTINGS, protocol, USERS[protocol][0])
             copied = [line for line in output.splitlines() if line.startswith(('vless://', 'vmess://', 'trojan://', 'ss://'))]
-            self.assertEqual(copied, raw)
+            self.assertCountEqual(copied, raw)
             self.assertEqual(output.count('\n\n'), len(raw) - 1)
             self.assertTrue(output.startswith('[01] ' + protocol.upper()))
+
+    def test_vless_display_recommends_direct_http_and_compatibility_choices(self):
+        output = x.display_links(SETTINGS, 'vless', USERS['vless'][0])
+        blocks = output.split('\n\n')
+        expected = [('tcp', 'reality'), ('xhttp', 'tls'), ('ws', 'tls')]
+        for block, (network, security) in zip(blocks, expected):
+            uri = urlparse(block.splitlines()[1])
+            query = parse_qs(uri.query)
+            self.assertEqual(query['type'], [network])
+            self.assertEqual(query['security'], [security])
+        self.assertIn('Recommended direct', blocks[0])
+        self.assertIn('Preferred HTTP transport', blocks[1])
+        self.assertIn('Compatibility fallback', blocks[2])
+        self.assertEqual(len(blocks), len(list(x.links(SETTINGS, 'vless', USERS['vless'][0]))))
 
     def test_reality_address_update_preserves_authentication_and_needs_no_restart(self):
         with tempfile.TemporaryDirectory() as folder:
