@@ -112,9 +112,9 @@ def main():
         username = input('Panel administrator name [admin]: ').strip() or 'admin'
         if not re.fullmatch(r'[a-zA-Z0-9_-]{1,32}', username):
             raise SystemExit('Invalid administrator name')
-        password = getpass.getpass('Panel password (at least 12 characters): ')
-        if len(password) < 12 or len(password) > 256 or password != getpass.getpass('Repeat password: '):
-            raise SystemExit('Passwords must match and contain 12-256 characters')
+        password = getpass.getpass('Panel password (at least 3 characters): ')
+        if len(password) < 3 or len(password) > 256 or password != getpass.getpass('Repeat password: '):
+            raise SystemExit('Passwords must match and contain 3-256 characters')
         import importlib.util
         spec = importlib.util.spec_from_file_location('eng_panel', HERE / 'panel-server.py')
         module = importlib.util.module_from_spec(spec)

@@ -18,7 +18,7 @@ git pull --ff-only origin main
 bash ./panel-install.sh
 ```
 
-Enter a separate panel administrator name and a password of at least 12
+Enter a separate panel administrator name and a password of at least 3
 characters. The installer prints the URL. The administrator is not a VPN or
 Linux login account. Existing accounts are visible through their account section.
 Installation only starts/restarts the two panel units, not VPN services.

@@ -174,11 +174,16 @@ class InstallTests(unittest.TestCase):
             for call in calls.call_args_list:
                 if 'restart' in call.args:
                     self.assertEqual(('systemctl','restart','frimps-panel-helper.service','frimps-panel.service'), call.args)
-            with patch('sys.argv', ['panel-install.py','--reset-password']), patch('builtins.input', return_value='newadmin'), patch.object(installer.getpass, 'getpass', return_value='a-different-password-123'):
+            with patch('sys.argv', ['panel-install.py','--reset-password']), patch('builtins.input', return_value='newadmin'), patch.object(installer.getpass, 'getpass', return_value='ab'):
+                with self.assertRaisesRegex(SystemExit, '3-256'):
+                    installer.main()
+            self.assertEqual(config, json.loads((installer.STATE / 'web.json').read_text()))
+            with patch('sys.argv', ['panel-install.py','--reset-password']), patch('builtins.input', return_value='newadmin'), patch.object(installer.getpass, 'getpass', return_value='abc'):
                 installer.main()
             reset = json.loads((installer.STATE / 'web.json').read_text())
             self.assertEqual('newadmin', reset['username'])
             self.assertNotEqual(config['passwordHash'], reset['passwordHash'])
+            self.assertEqual(web.password_hash('abc', reset['salt']), reset['passwordHash'])
             self.assertEqual(config['origin'], reset['origin'])
 
 
