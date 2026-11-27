@@ -54,6 +54,9 @@ config_check nft list table ip frimps_v6_ovpn
 # A listening UDP socket can still be shadowed by another NAT base chain.
 # Include the routing/key/backend audit before declaring installation healthy.
 config_check bash "$script_dir/slowdns-audit.sh" --local
+if [[ -s ${V6_STATE_DIR:-/etc/frimps-v6}/xray-settings.json ]]; then
+  config_check bash "$script_dir/xray-audit.sh"
+fi
 domain="$(jq -r '.primaryDomain // empty' /etc/frimps-v6/routes.json 2>/dev/null || true)"
 if [[ -n "$domain" ]] && getent ahostsv6 "$domain" 2>/dev/null | grep -q .; then
   printf '[warn] %s publishes IPv6; keep UDP range protocol clients on its IPv4 A record until IPv6 UDP routing is configured.\n' "$domain" >&2

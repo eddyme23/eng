@@ -17,11 +17,17 @@ bash ./install-frimps.sh
 
 ## Protocols and ports
 
+Xray installation, account management and live-server update instructions: [XRAY.md](XRAY.md).
+
 | Service | Public ports / path |
 |---|---|
 | OpenSSH | 22 |
 | SSH WebSocket | 80, 8080, 8880, 2082, 2086 |
 | SSH SSL and SSH WebSocket TLS | 443 |
+| Xray VLESS / VMess WS and HTTPUpgrade | 80 NTLS / 443 TLS |
+| Xray VLESS XHTTP | 80 NTLS / 443 TLS |
+| Xray Trojan WebSocket | 443 TLS |
+| Xray VLESS REALITY + Vision | 443 TCP, separate SNI route |
 | OpenVPN Websocket | 80, 8080, 8880; path `/openvpn` |
 | OpenVPN TLS | 8433; path `/openvpn` |
 | OpenVPN | TCP/UDP 1194 |

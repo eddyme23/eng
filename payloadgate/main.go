@@ -3,10 +3,13 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"flag"
 	"io"
 	"log"
 	"net"
+	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +17,27 @@ import (
 
 const maxHeader = 32 * 1024
 const maxPreface = 64 * 1024
+
+var xrayRoutes = map[string]string{}
+
+// Only operator-generated, loopback routes are accepted. Unknown paths retain
+// the existing SSH/OpenVPN behavior; query strings never change the route.
+func xrayTarget(request []string) string {
+	if len(request) < 2 {
+		return ""
+	}
+	u, err := url.ParseRequestURI(request[1])
+	if err != nil {
+		return ""
+	}
+	if target := xrayRoutes[u.Path]; target != "" {
+		return target
+	}
+	if strings.HasPrefix(u.Path, "/vless-xhttp/") {
+		return xrayRoutes["/vless-xhttp"]
+	}
+	return ""
+}
 
 // Read bytewise from the buffered reader so even a line without a newline
 // cannot allocate an unbounded header before the size check.
@@ -88,13 +112,16 @@ func handle(client net.Conn, sshTarget, wsTarget, openvpnTarget string) {
 	websocket := hasWebSocketKey(header)
 	request := strings.Fields(strings.SplitN(string(header), "\n", 2)[0])
 	openvpn := len(request) >= 2 && request[0] == "GET" && request[1] == "/openvpn"
-	if openvpn {
+	xray := xrayTarget(request)
+	if xray != "" {
+		target = xray
+	} else if openvpn {
 		target = openvpnTarget
 	} else if websocket {
 		target = wsTarget
 	}
 	var firstSSH []byte
-	if !websocket && !openvpn {
+	if !websocket && !openvpn && xray == "" {
 		response := "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n"
 		if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(string(header))), "CONNECT ") {
 			response = "HTTP/1.1 200 Connection established\r\nConnection: keep-alive\r\n\r\n"
@@ -108,7 +135,7 @@ func handle(client net.Conn, sshTarget, wsTarget, openvpnTarget string) {
 		// Dropbear authentication slot for HTTP-only or idle clients.
 		firstSSH, err = waitForSSH(reader)
 		if err != nil {
-            log.Printf("legacy SSH identification from %s: %v", client.RemoteAddr(), err)
+			log.Printf("legacy SSH identification from %s: %v", client.RemoteAddr(), err)
 			return
 		}
 		_ = client.SetReadDeadline(time.Time{})
@@ -119,7 +146,7 @@ func handle(client net.Conn, sshTarget, wsTarget, openvpnTarget string) {
 		return
 	}
 	defer backend.Close()
-	if websocket || openvpn {
+	if websocket || openvpn || xray != "" {
 		// sshws validates the upgrade and handles RFC 6455 framing.
 		_ = backend.SetWriteDeadline(time.Now().Add(15 * time.Second))
 		if _, err := backend.Write(header); err != nil {
@@ -141,7 +168,21 @@ func main() {
 	sshTarget := flag.String("ssh-target", "127.0.0.1:143", "raw SSH target")
 	wsTarget := flag.String("ws-target", "127.0.0.1:3103", "SSH WebSocket target")
 	openvpnTarget := flag.String("openvpn-target", "127.0.0.1:10081", "OpenVPN HTTP upgrade target")
+	routeFile := flag.String("xray-routes", "/etc/frimps-v6/xray-routes.json", "optional local Xray routes")
 	flag.Parse()
+	if data, err := os.ReadFile(*routeFile); err == nil {
+		if err := json.Unmarshal(data, &xrayRoutes); err != nil {
+			log.Fatal(err)
+		}
+		for path, target := range xrayRoutes {
+			host, _, err := net.SplitHostPort(target)
+			if err != nil || host != "127.0.0.1" || !strings.HasPrefix(path, "/") {
+				log.Fatal("invalid Xray route")
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		log.Fatal(err)
+	}
 	listener, err := net.Listen("tcp", *listen)
 	if err != nil {
 		log.Fatal(err)

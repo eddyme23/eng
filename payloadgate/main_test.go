@@ -11,6 +11,67 @@ import (
 	"time"
 )
 
+func TestXrayPathsDoNotCaptureSSHOrOpenVPN(t *testing.T) {
+	old := xrayRoutes
+	defer func() { xrayRoutes = old }()
+	xrayRoutes = map[string]string{"/vless-ws": "vless", "/vmess-upgrade": "vmess", "/vless-xhttp": "xhttp"}
+	for path, want := range map[string]string{
+		"/vless-ws?ed=2048": "vless", "/vmess-upgrade": "vmess", "/vless-xhttp/session/0": "xhttp",
+		"/": "", "/openvpn": "", "/vless-ws-other": "", "/vless-xhttp-other/session": "",
+	} {
+		if got := xrayTarget([]string{"GET", path, "HTTP/1.1"}); got != want {
+			t.Fatalf("%s: got %q want %q", path, got, want)
+		}
+	}
+}
+
+func TestXrayForwardsHeaderAndBufferedBodyWithoutSSHIdentification(t *testing.T) {
+	old := xrayRoutes
+	defer func() { xrayRoutes = old }()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	xrayRoutes = map[string]string{"/vless-xhttp": listener.Addr().String()}
+	request := "POST /vless-xhttp/session/0 HTTP/1.1\r\nHost: direct.example.test\r\nContent-Length: 4\r\n\r\nDATA"
+	backendDone := make(chan error, 1)
+	go func() {
+		c, e := listener.Accept()
+		if e != nil {
+			backendDone <- e
+			return
+		}
+		defer c.Close()
+		c.SetDeadline(time.Now().Add(3 * time.Second))
+		data := make([]byte, len(request))
+		_, e = io.ReadFull(c, data)
+		if e == nil && string(data) != request {
+			e = errors.New("gateway changed request")
+		}
+		if e == nil {
+			_, e = io.WriteString(c, "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK")
+		}
+		backendDone <- e
+	}()
+	server, client := net.Pipe()
+	defer client.Close()
+	done := make(chan struct{})
+	go func() { defer close(done); handle(server, "unused-ssh", "unused-ws", "unused-openvpn") }()
+	client.SetDeadline(time.Now().Add(3 * time.Second))
+	if _, err := io.WriteString(client, request); err != nil {
+		t.Fatal(err)
+	}
+	response, err := io.ReadAll(client)
+	if err != nil || !strings.HasSuffix(string(response), "\r\n\r\nOK") {
+		t.Fatalf("response %q error %v", response, err)
+	}
+	if err := <-backendDone; err != nil {
+		t.Fatal(err)
+	}
+	<-done
+}
+
 func TestReadHeaderPreservesFollowingBytes(t *testing.T) {
 	for _, end := range []string{"\r\n\r\n", "\n\n"} {
 		header := "GET / HTTP/1.1" + end

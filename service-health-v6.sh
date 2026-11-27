@@ -63,6 +63,7 @@ if [[ -x /usr/local/libexec/frimps-retire-iptables-rules ]]; then
 fi
 # Check the protocol's own listener; UDP services are not probed with fake logins.
 while read -r unit transport port; do check "$unit" "$transport" "$port"; done <<'UNITS'
+frimps-xray.service t 13107
 frimps-v6-dropbear.service t 143
 frimps-v6-ssh-backend.service t 2222
 frimps-v6-sshws.service t 3103

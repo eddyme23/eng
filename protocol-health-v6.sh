@@ -28,6 +28,7 @@ for file in backends.json haproxy-443.cfg nginx-main-tls.conf nginx-plain.conf n
 done
 
 if [[ "$mode" == '--live' ]]; then
+  if [[ -s "$state_dir/xray-settings.json" ]]; then check_cmd bash "$script_dir/xray-audit.sh"; fi
   domain="$(jq -r '.primaryDomain' "$state_dir/routes.json")"
   for unit in nginx haproxy frimps-v6-dropbear frimps-v6-sshws frimps-v6-tlsmux frimps-v6-payloadgate; do
     check_cmd systemctl is-active --quiet "$unit"

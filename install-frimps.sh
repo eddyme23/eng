@@ -219,6 +219,9 @@ if [[ ! -s "$state_dir/ssh-capacity.env" ]]; then
 fi
 systemctl enable --now frimps-v6-ssh-backend.service
 
+note 'Installing Xray VLESS, VMess and Trojan transports'
+bash "$script_dir/xray-install.sh"
+
 note 'Enabling every installed Frimps service for this boot and future boots'
 bash "$script_dir/refresh-menu-v6.sh"
 systemctl enable --now certbot.timer
@@ -235,6 +238,7 @@ if [[ ${V6_INSTALL_HCR:-1} == 1 ]]; then required_units+=' frimps-hcr'; fi
 if [[ ${V6_INSTALL_HCR_TLS:-1} == 1 ]]; then required_units+=' frimps-hcr-tls'; fi
 failed_units=()
 required_units+=' frimps-firewall-migration'
+required_units+=' frimps-xray frimps-xray-cleanup.timer'
 for unit in $required_units; do
   if ! systemctl is-active --quiet "$unit" || ! systemctl is-enabled --quiet "$unit"; then failed_units+=("$unit"); fi
 done

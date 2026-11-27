@@ -143,4 +143,7 @@ PrivateTmp=true
 WantedBy=multi-user.target
 EOF
 chmod 600 "$state_dir/tlsmux.service" "$state_dir/payloadgate.service"
+if [[ -s "$state_dir/xray-settings.json" ]]; then
+  python3 "$(dirname -- "${BASH_SOURCE[0]}")/xray-manager.py" decorate
+fi
 printf 'Rendered %s/haproxy-443.cfg and %s/nginx-main-tls.conf\n' "$state_dir" "$state_dir"

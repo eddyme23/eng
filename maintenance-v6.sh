@@ -17,6 +17,7 @@ monitor() {
 }
 restart() {
   case "${1:-}" in
+    xray) units='frimps-xray' ;;
     hcr) units='frimps-hcr' ;;
     hcrtls) units='frimps-hcr-tls' ;;
     bhttp) bash "$script_dir/restart-bhttp.sh"; return ;;
@@ -24,8 +25,8 @@ restart() {
     udp) units='frimps-v6-udp-routing frimps-slowdns hysteria1-server hysteria2-server zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip' ;;
     openvpn) units='frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield' ;;
     wireguard) units='frimps-v6-wireguard-nat wg-quick@wg0' ;;
-    all) units='frimps-v6-dropbear frimps-v6-ssh-backend frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-hcr frimps-hcr-tls frimps-bhttp frimps-bhttp-alt.socket frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-slowdns hysteria1-server hysteria2-server zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield wg-quick@wg0 nginx haproxy' ;;
-    *) die 'usage: maintenance-v6.sh restart {ssh|udp|openvpn|wireguard|hcr|hcrtls|bhttp|all}' ;;
+    all) units='frimps-xray frimps-v6-dropbear frimps-v6-ssh-backend frimps-v6-sshws frimps-v6-payloadgate frimps-v6-tlsmux frimps-hcr frimps-hcr-tls frimps-bhttp frimps-bhttp-alt.socket frimps-v6-udp-routing frimps-v6-wireguard-nat frimps-slowdns hysteria1-server hysteria2-server zivpn frimps-badvpn frimps-udp-custom frimps-socksip-network frimps-socksip frimps-openvpn-nat frimps-openvpn-udp frimps-openvpn-tcp frimps-openvpn-gateway frimps-openvpn-stunnel frimps-openvpn-bshield wg-quick@wg0 nginx haproxy' ;;
+    *) die 'usage: maintenance-v6.sh restart {ssh|xray|udp|openvpn|wireguard|hcr|hcrtls|bhttp|all}' ;;
   esac
   for unit in $units; do
     [[ $unit != frimps-bhttp-alt.socket ]] || continue
@@ -51,6 +52,7 @@ cleanup_json() {
   done < <(jq -r --arg today "$today" ".[] | select(.expiresAt < \$today) | .$key" "$file")
 }
 cleanup() {
+  if [[ -s "$state_dir/xray-settings.json" ]]; then bash "$script_dir/xray-accounts.sh" cleanup; fi
   bash "$script_dir/ssh-accounts.sh" cleanup || true
   bash "$script_dir/wireguard-accounts.sh" cleanup || true
   cleanup_json "$state_dir/hysteria1-users.json" name hysteria1-accounts.sh
@@ -63,6 +65,7 @@ logs() {
   local unit item
   local -a journal_units=()
   case "${1:-}" in
+    xray) unit='frimps-xray.service' ;;
     ssh) unit='frimps-v6-sshws.service frimps-v6-payloadgate.service frimps-v6-tlsmux.service frimps-v6-ssh-backend.service' ;;
     openvpn) unit='frimps-openvpn-gateway.service frimps-openvpn-stunnel.service frimps-openvpn-bshield.service' ;;
     bhttp) unit='frimps-bhttp.service frimps-bhttp-alt.socket frimps-bhttp-alt.service' ;;
@@ -74,7 +77,7 @@ logs() {
     zivpn) unit='zivpn.service' ;;
     slowdns) unit='frimps-slowdns.service' ;;
     udpcustom) unit='frimps-udp-custom.service frimps-badvpn.service' ;;
-    *) die 'usage: maintenance-v6.sh logs {ssh|openvpn|hysteria1|hysteria2|wireguard|zivpn|slowdns|udpcustom|socksip|hcr|bhttp}' ;;
+    *) die 'usage: maintenance-v6.sh logs {ssh|xray|openvpn|hysteria1|hysteria2|wireguard|zivpn|slowdns|udpcustom|socksip|hcr|bhttp}' ;;
   esac
   for item in $unit; do journal_units+=(-u "$item"); done
   journalctl --no-pager -n 100 "${journal_units[@]}"

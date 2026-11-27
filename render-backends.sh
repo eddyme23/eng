@@ -10,4 +10,7 @@ jq -n '{version:2,publicRoutes:[
   {transport:"tls-http",path:"/openvpn",backend:"openvpn-websocket:10081"}
 ]}' > "$state_dir/backends.json"
 chmod 600 "$state_dir/backends.json"
+if [[ -s "$state_dir/xray-settings.json" ]]; then
+  python3 "$(dirname -- "${BASH_SOURCE[0]}")/xray-manager.py" metadata
+fi
 echo 'Rendered remaining protocol backend map.'

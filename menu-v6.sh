@@ -110,6 +110,7 @@ show_ports() {
   port_row 'UDPCustom:' '50001-65535 UDP' 'SocksIP:' '1195-3999 UDP'
   port_row 'OpenVPN:' '1194 TCP/UDP' 'OVPN SSL:' '8433'
   port_row 'OVPN WS:' '80,8080,8880,443 TLS' 'WireGuard:' '4000 UDP'
+  if [[ -s "$state_dir/xray-settings.json" ]]; then port_row 'Xray NTLS:' '80 TCP' 'Xray TLS:' '443 TCP'; fi
   port_row 'BHTTP:' "$(if [[ -r "$state_dir/bhttp.env" ]]; then source "$state_dir/bhttp.env"; ports="${BHTTP_PORTS:-$BHTTP_PORT}"; printf '%s TCP' "${ports// /, }"; else printf 'not installed'; fi)" 'HCR:' '8881 NTLS / 8444 TLS'
   printf '%b-------------------------- SYSTEM RESOURCES -------------------------%b\n' "$RED" "$NC"
   printf '  %bRAM Used:%b  %-15s  %bCPU Used:%b  %-13s  %bBuffer:%b  %s\n' "$WHITE" "$NC" "$ram" "$WHITE" "$NC" "$cpu" "$WHITE" "$NC" "$buffer"
@@ -241,10 +242,10 @@ maintenance_menu() {
 protocol_logs_menu() {
   while true; do
     clear; menu_title 'PROTOCOL LOGS (LAST 100 LINES)'
-    item 1 'SSH bridge'; item 2 'OpenVPN transports'; item 3 'Hysteria 1'; item 4 'Hysteria 2'; item 5 'WireGuard'; item 6 'ZiVPN'; item 7 'SlowDNS'; item 8 'UDP Custom / BadVPN'; item 9 'SocksIP UDP'; item 10 'HCR NTLS / TLS'; item 11 'BHTTP'; back_item
+    item 1 'SSH bridge'; item 2 'OpenVPN transports'; item 3 'Hysteria 1'; item 4 'Hysteria 2'; item 5 'WireGuard'; item 6 'ZiVPN'; item 7 'SlowDNS'; item 8 'UDP Custom / BadVPN'; item 9 'SocksIP UDP'; item 10 'HCR NTLS / TLS'; item 11 'BHTTP'; item 12 'Xray'; back_item
     read_menu_option x '  ► Option: ' || return
     case "$x" in
-      1) bash "$script_dir/maintenance-v6.sh" logs ssh; pause;; 2) bash "$script_dir/maintenance-v6.sh" logs openvpn; pause;; 3) bash "$script_dir/maintenance-v6.sh" logs hysteria1; pause;; 4) bash "$script_dir/maintenance-v6.sh" logs hysteria2; pause;; 5) bash "$script_dir/maintenance-v6.sh" logs wireguard; pause;; 6) bash "$script_dir/maintenance-v6.sh" logs zivpn; pause;; 7) bash "$script_dir/maintenance-v6.sh" logs slowdns; pause;; 8) bash "$script_dir/maintenance-v6.sh" logs udpcustom; pause;; 9) bash "$script_dir/maintenance-v6.sh" logs socksip; pause;; 10) bash "$script_dir/maintenance-v6.sh" logs hcr; pause;; 11) bash "$script_dir/maintenance-v6.sh" logs bhttp; pause;; 0) return;; *) printf '%bInvalid option.%b\n' "$RED" "$NC"; sleep 1;;
+      1) bash "$script_dir/maintenance-v6.sh" logs ssh; pause;; 2) bash "$script_dir/maintenance-v6.sh" logs openvpn; pause;; 3) bash "$script_dir/maintenance-v6.sh" logs hysteria1; pause;; 4) bash "$script_dir/maintenance-v6.sh" logs hysteria2; pause;; 5) bash "$script_dir/maintenance-v6.sh" logs wireguard; pause;; 6) bash "$script_dir/maintenance-v6.sh" logs zivpn; pause;; 7) bash "$script_dir/maintenance-v6.sh" logs slowdns; pause;; 8) bash "$script_dir/maintenance-v6.sh" logs udpcustom; pause;; 9) bash "$script_dir/maintenance-v6.sh" logs socksip; pause;; 10) bash "$script_dir/maintenance-v6.sh" logs hcr; pause;; 11) bash "$script_dir/maintenance-v6.sh" logs bhttp; pause;; 12) bash "$script_dir/maintenance-v6.sh" logs xray; pause;; 0) return;; *) printf '%bInvalid option.%b\n' "$RED" "$NC"; sleep 1;;
     esac
   done
 }
@@ -297,6 +298,7 @@ while true; do
   item 10 'System Utilities (BBR / Netflix)'
   item 11 'Advanced Settings (domain / obfuscation)'
   item 12 'Reboot Server'
+  item 13 'Xray Account Management (VLESS / VMess / Trojan)'
   printf '  [%b00%b] %bExit%b\n' "$RED" "$NC" "$BOLD" "$NC"
   echo
   read_menu_option choice '  ► Select an option: ' || exit 0
@@ -313,6 +315,7 @@ while true; do
     10) utilities_menu ;;
     11) settings_menu ;;
     12) read -r -p 'Reboot server now? [y/N] ' confirm; [[ "$confirm" =~ ^[Yy]$ ]] && reboot ;;
+    13) bash "$script_dir/xray-menu.sh" ;;
     0) exit 0 ;;
     *) echo 'Invalid option.'; sleep 1 ;;
   esac
