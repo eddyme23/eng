@@ -42,9 +42,16 @@ origin verification. Plain HTTP is never enabled.
 
 ## Account sections
 
-* SSH password accounts also serve WS, SSL, BHTTP, HCR, DNSTT and SocksIP.
-* UDP Custom uses the same SSH password accounts, not another duplicate store.
-* Certificate accounts: create, renew, list, delete all local identities, export
+* **SSH protocols** combines the SSH transports in one section. Choose
+  **Username and password** or **App certificate** under Account authentication.
+  This selector switches between the existing separate account managers; it does
+  not convert accounts or merge their credentials.
+* SSH password accounts also serve WS, SSL, BHTTP, HCR, DNSTT, SocksIP and UDP
+  Custom. UDP Custom does not need a separate panel section or duplicate account.
+* App certificate accounts serve the OpenSSH-based transports. SocksIP and UDP
+  Custom still use password authentication; an exported bundle may include
+  separate UDP Custom credentials, not certificate authentication on UDP.
+* Certificate operations: create, renew, list, delete all local identities, export
   private Gen JSON and export public shared authorization. Shared authorization
   import, individual identity revocation and proxy settings remain in the CLI.
 * Hysteria 1/2, ZiVPN, OpenVPN and WireGuard: create, renew, delete and list.
@@ -110,3 +117,5 @@ deployment restrictions. Tests substitute account execution to avoid altering
 real VPN users. Linux systemd installation, Unix peer UID checks, certificate
 renewal, actual account changes and phone browsing/reconnects need a staging VPS
 before production rollout. Existing protocol-manager tests cover their own logic.
+Run `node tests/panel_ui_test.js` to check SSH password/certificate selection,
+request routing, credential clearing and operation-specific form fields.

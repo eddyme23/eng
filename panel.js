@@ -1,6 +1,36 @@
 'use strict';
 const byId = id => document.getElementById(id);
 let csrf = '', lastOutput = '', busy = false;
+function selectedProtocol() {
+  return byId('protocol').value === 'ssh' ? byId('auth').value : byId('protocol').value;
+}
+function updateFields() {
+  const group = byId('protocol').value === 'ssh', protocol = selectedProtocol();
+  byId('auth-field').hidden = !group;
+  for (const option of byId('action').options) {
+    option.hidden = option.disabled = (option.value === 'share' && protocol !== 'certificate') ||
+      (option.value === 'export' && protocol === 'ssh');
+  }
+  if ([...byId('action').options].some(option => option.value === byId('action').value && option.disabled)) byId('action').value = 'list';
+  const action = byId('action').value, validity = action === 'create' || action === 'renew';
+  const needsPassword = action === 'create' && (protocol === 'ssh' || protocol === 'openvpn');
+  byId('name-field').hidden = action === 'list'; byId('name').required = action !== 'list';
+  byId('days-field').hidden = !validity; byId('days').disabled = !validity;
+  byId('password-field').hidden = !needsPassword; byId('password').disabled = !needsPassword;
+  byId('password').required = needsPassword;
+  if (!needsPassword) byId('password').value = '';
+  byId('account-help').textContent = group ? (protocol === 'certificate'
+    ? 'App certificates authenticate SSH, WebSocket, SSL/TLS, BHTTP, HCR and SlowDNS/DNSTT through OpenSSH. Export the private bundle for Gen. SocksIP and UDP Custom use password authentication; the bundle may include separate UDP Custom credentials.'
+    : 'One password account serves SSH, WebSocket, SSL/TLS, BHTTP, HCR, SlowDNS/DNSTT, SocksIP and UDP Custom. Certificate accounts are managed separately using the authentication selector.')
+    : 'This section uses its existing ENG account manager.';
+}
+function changeAccountSystem() {
+  byId('password').value = ''; lastOutput = ''; byId('output').textContent = ''; byId('download').disabled = true;
+  updateFields();
+}
+byId('protocol').onchange = changeAccountSystem;
+byId('auth').onchange = changeAccountSystem;
+byId('action').onchange = updateFields;
 function signedIn(value) { byId('login').hidden = value; byId('workspace').hidden = !value; byId('logout').hidden = !value; }
 async function request(path, data) {
   const options = data === undefined ? {} : {method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify(data)};
@@ -26,7 +56,7 @@ async function operate(data) {
 }
 byId('accounts').onsubmit = event => {
   event.preventDefault();
-  const data={protocol:byId('protocol').value,action:byId('action').value,name:byId('name').value,days:Number(byId('days').value),password:byId('password').value};
+  const data={protocol:selectedProtocol(),action:byId('action').value,name:byId('name').value,days:Number(byId('days').value),password:byId('password').disabled ? '' : byId('password').value};
   if (data.action !== 'list' && !data.name) { byId('message').textContent='Enter an account name.'; return; }
   if (data.action==='delete' && !confirm('Delete '+data.name+' from '+data.protocol+' on this VPS? Certificate deletion removes all its local identities.')) return;
   if (data.action==='export' && !confirm('Display private account credentials on this screen?')) return;
@@ -35,4 +65,5 @@ byId('accounts').onsubmit = event => {
 byId('status').onclick=()=>operate({action:'status'});
 byId('logout').onclick=async()=>{ try{await request('/api/logout',{});}finally{csrf='';lastOutput='';byId('output').textContent='';byId('download').disabled=true;signedIn(false);} };
 byId('download').onclick=()=>{const url=URL.createObjectURL(new Blob([lastOutput],{type:'text/plain'}));const a=document.createElement('a');a.href=url;a.download='eng-account-export.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+updateFields();
 request('/api/session').then(result=>{csrf=result.csrf;signedIn(true);}).catch(()=>signedIn(false));
