@@ -27,9 +27,9 @@ bash ./install-frimps.sh
 | Xray VLESS / VMess WS and HTTPUpgrade | 80 NTLS / 443 TLS |
 | Xray VLESS XHTTP | 80 NTLS / 443 TLS |
 | Xray Trojan WebSocket | 443 TLS |
-| Xray VLESS REALITY + Vision | 443 TCP, separate SNI route |
+| Xray VLESS REALITY + Vision | 443 TCP |
 | Xray VLESS / VMess / Trojan gRPC | 443 TLS, HTTP/2 |
-| Shadowsocks 2022 | 8388 TCP by default; active after account creation |
+| Shadowsocks 2022 | 8388 TCP |
 | OpenVPN Websocket | 80, 8080, 8880; path `/openvpn` |
 | OpenVPN TLS | 8433; path `/openvpn` |
 | OpenVPN | TCP/UDP 1194 |
@@ -44,6 +44,5 @@ bash ./install-frimps.sh
 | UDP Custom |UDP 50001-65535 |
 | SocksIP | UDP 1195-3999 |
 | BadVPN | 7300 |
-
 
 Menu: `frimps-v6-menu` or `menu`.
