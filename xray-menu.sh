@@ -15,12 +15,13 @@ pick() {
   account="${names[$((choice-1))]}"
 }
 while true; do
-  printf '\nXRAY ACCOUNT MANAGEMENT\n  [01] VLESS (recommended)\n  [02] VMess\n  [03] Trojan\n  [04] Shadowsocks 2022\n  [05] Status\n  [06] Restart Xray\n  [00] Back\n'
+  printf '\nXRAY ACCOUNT MANAGEMENT\n  [01] VLESS (recommended)\n  [02] VMess\n  [03] Trojan\n  [04] Shadowsocks 2022\n  [05] Status\n  [06] Restart Xray\n  [07] Combined Xray accounts (all protocols)\n  [00] Back\n'
   read -r -p 'Option: ' option || exit 0
   case "$option" in
     0|00) exit 0;;
     1|01) protocol=vless;; 2|02) protocol=vmess;; 3|03) protocol=trojan;;
     4|04) protocol=shadowsocks;;
+    7|07) protocol=combined;;
     5|05) systemctl status frimps-xray --no-pager; read -r -p 'Press Enter...' _; continue;;
     6|06) systemctl restart frimps-xray; read -r -p 'Press Enter...' _; continue;;
     *) echo 'Invalid option.'; continue;;
@@ -40,7 +41,12 @@ while true; do
           bash "$script_dir/xray-accounts.sh" links "$protocol" "$account"
         fi;;
       2|02) if pick; then read -r -p 'Validity (days): ' days || exit 0; bash "$script_dir/xray-accounts.sh" renew "$protocol" "$account" "$days"; fi;;
-      3|03) if pick; then read -r -p "Delete $account? [y/N] " confirm || exit 0; [[ $confirm =~ ^[Yy]$ ]] && bash "$script_dir/xray-accounts.sh" delete "$protocol" "$account"; fi;;
+      3|03) if pick; then
+        prompt="Delete $account? [y/N] "
+        if [[ $protocol == combined ]]; then prompt="Delete $account from ALL four Xray protocols? [y/N] "; fi
+        read -r -p "$prompt" confirm || exit 0
+        [[ $confirm =~ ^[Yy]$ ]] && bash "$script_dir/xray-accounts.sh" delete "$protocol" "$account"
+      fi;;
       4|04) bash "$script_dir/xray-accounts.sh" list "$protocol";;
       5|05) if pick; then bash "$script_dir/xray-accounts.sh" links "$protocol" "$account"; fi;;
       *) echo 'Invalid option.'; continue;;

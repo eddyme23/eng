@@ -293,21 +293,107 @@ def set_reality_address(state, value):
     return settings['reality']['domain']
 
 
+def combined_rows(users, name):
+    rows = {p: [u for u in users[p] if u['name'] == name and u.get('combinedId')] for p in PROTOCOLS}
+    identities = {u['combinedId'] for group in rows.values() for u in group}
+    if not identities:
+        raise ValueError('Combined account not found')
+    if len(identities) != 1 or any(len(group) > 1 for group in rows.values()):
+        raise ValueError('Combined account has inconsistent identity metadata')
+    return rows, identities.pop()
+
+
+def combined_list(users):
+    names = sorted({u['name'] for p in PROTOCOLS for u in users[p] if u.get('combinedId')})
+    for name in names:
+        rows, _ = combined_rows(users, name)
+        members = [u for group in rows.values() for u in group]
+        expiry = min(u['expiresAt'] for u in members)
+        status = 'incomplete' if any(not group for group in rows.values()) else 'active' if all(active(u) for u in members) else 'expired'
+        yield name, expiry, status
+
+
+def new_account(protocol, name, expiry, combined_id=None):
+    credential = ({'password': base64.b64encode(secrets.token_bytes(16)).decode()} if protocol == 'shadowsocks'
+                  else {'password': secrets.token_urlsafe(32)} if protocol == 'trojan' else {'uuid': str(uuid.uuid4())})
+    return dict(name=name, expiresAt=expiry, **credential, **({'combinedId': combined_id} if combined_id else {}))
+
+
+def commit_users(state, binary, old, users):
+    settings = load(state / 'xray-settings.json')
+    config = configuration(settings, users)
+    validate_config(binary, config, state)
+    old_config = (state / 'xray.json').read_text()
+    try:
+        atomic(state / 'xray-users.json', users)
+        atomic(state / 'xray.json', config)
+        subprocess.run(['systemctl', 'restart', 'frimps-xray.service'], check=True)
+        subprocess.run(['systemctl', 'is-active', '--quiet', 'frimps-xray.service'], check=True)
+    except Exception:
+        atomic(state / 'xray-users.json', old)
+        atomic(state / 'xray.json', old_config)
+        subprocess.run(['systemctl', 'restart', 'frimps-xray.service'], check=False)
+        raise
+
+
+def change_combined(state, binary, action, name, days):
+    old = accounts_at(state)
+    users = copy.deepcopy(old)
+    if action in ('create', 'renew'):
+        if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_.-]{0,31}', name) or not 1 <= days <= 3650:
+            raise ValueError('Use a 1-32 character account name and 1-3650 days')
+        expiry = (dt.datetime.now(dt.timezone.utc).date() + dt.timedelta(days=days)).isoformat()
+    if action == 'create':
+        if any(u['name'] == name for p in PROTOCOLS for u in users[p]):
+            raise ValueError('This name already exists in Xray; use a new combined account name. Existing accounts were preserved.')
+        if 'shadowsocks' not in load(state / 'xray-settings.json'):
+            raise ValueError('Run xray-install.sh to upgrade Shadowsocks settings first')
+        identity = uuid.uuid4().hex
+        for p in PROTOCOLS:
+            users[p].append(new_account(p, name, expiry, identity))
+    elif action in ('renew', 'delete'):
+        rows, identity = combined_rows(users, name)
+        if action == 'renew':
+            if any(not group for group in rows.values()):
+                raise ValueError('Combined account is incomplete; delete it in the combined menu before recreating it')
+            for group in rows.values():
+                group[0]['expiresAt'] = expiry
+        else:
+            for p in PROTOCOLS:
+                users[p] = [u for u in users[p] if not (u['name'] == name and u.get('combinedId') == identity)]
+    else:
+        raise ValueError('Unsupported combined account operation')
+    commit_users(state, binary, old, users)
+
+
+def combined_links(settings, users, name):
+    rows, _ = combined_rows(users, name)
+    if any(not group or not active(group[0]) for group in rows.values()):
+        raise ValueError('An active, complete combined account is required')
+    return '\n\n'.join(p.upper() + '\n' + display_links(settings, p, rows[p][0]) for p in PROTOCOLS)
+
+
 def change(state, binary, protocol, action, name='', days=30):
+    if protocol == 'combined':
+        if action == 'cleanup':
+            return change(state, binary, 'vless', action)
+        return change_combined(state, binary, action, name, days)
     old = accounts_at(state)
     users = copy.deepcopy(old)
     rows = users[protocol]
     matches = [u for u in rows if u['name'] == name]
+    if action in ('renew', 'delete') and any(u.get('combinedId') for u in matches):
+        raise ValueError('Manage this account through Combined Xray accounts so all protocols stay together')
     if action in ('create', 'renew'):
         if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9_.-]{0,31}', name) or not 1 <= days <= 3650:
             raise ValueError('Use a 1-32 character account name and 1-3650 days')
         expiry = (dt.datetime.now(dt.timezone.utc).date() + dt.timedelta(days=days)).isoformat()
         if action == 'create':
+            if any(u['name'] == name and u.get('combinedId') for p in PROTOCOLS for u in old[p]):
+                raise ValueError('This name belongs to a combined Xray account')
             if matches:
                 raise ValueError('Account already exists; renew it or delete it first')
-            rows.append(dict(name=name, expiresAt=expiry, **({'password': base64.b64encode(secrets.token_bytes(16)).decode()}
-                        if protocol == 'shadowsocks' else {'password': secrets.token_urlsafe(32)}
-                        if protocol == 'trojan' else {'uuid': str(uuid.uuid4())})))
+            rows.append(new_account(protocol, name, expiry))
         else:
             if not matches:
                 raise ValueError('Account not found')
@@ -324,19 +410,7 @@ def change(state, binary, protocol, action, name='', days=30):
     settings = load(state / 'xray-settings.json')
     if protocol == 'shadowsocks' and 'shadowsocks' not in settings:
         raise ValueError('Run xray-install.sh to upgrade Shadowsocks settings first')
-    config = configuration(settings, users)
-    validate_config(binary, config, state)
-    old_config = (state / 'xray.json').read_text()
-    try:
-        atomic(state / 'xray-users.json', users)
-        atomic(state / 'xray.json', config)
-        subprocess.run(['systemctl', 'restart', 'frimps-xray.service'], check=True)
-        subprocess.run(['systemctl', 'is-active', '--quiet', 'frimps-xray.service'], check=True)
-    except Exception:
-        atomic(state / 'xray-users.json', old)
-        atomic(state / 'xray.json', old_config)
-        subprocess.run(['systemctl', 'restart', 'frimps-xray.service'], check=False)
-        raise
+    commit_users(state, binary, old, users)
 
 
 @contextlib.contextmanager
@@ -355,7 +429,7 @@ def locked(state, account_operation=False):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('action', choices=['init', 'render', 'decorate', 'metadata', 'create', 'renew', 'delete', 'list', 'links', 'cleanup', 'reality-address'])
-    parser.add_argument('protocol', nargs='?', choices=PROTOCOLS, default='vless')
+    parser.add_argument('protocol', nargs='?', choices=(*PROTOCOLS, 'combined'), default='vless')
     parser.add_argument('name', nargs='?', default='')
     parser.add_argument('days', nargs='?', type=int, default=30)
     parser.add_argument('--domain')
@@ -410,9 +484,25 @@ def main():
             print(f'REALITY connection address: {address}:443')
             print('Re-export the VLESS link. SNI, keys, short ID and accounts were preserved; no service restart was needed.')
         elif args.action == 'list':
-            for u in accounts_at(state)[args.protocol]:
-                print(u['name'], u['expiresAt'], 'active' if active(u) else 'expired', sep='\t')
+            users = accounts_at(state)
+            if args.protocol == 'combined':
+                for row in combined_list(users):
+                    print(*row, sep='\t')
+            else:
+                for u in users[args.protocol]:
+                    fields = [u['name'], u['expiresAt'], 'active' if active(u) else 'expired']
+                    if u.get('combinedId'):
+                        fields.append('combined')
+                    print(*fields, sep='\t')
         elif args.action == 'links':
+            if args.protocol == 'combined':
+                users = accounts_at(state)
+                output = combined_links(load(state / 'xray-settings.json'), users, args.name)
+                rows, _ = combined_rows(users, args.name)
+                print('Private combined Xray connection links for:', args.name)
+                print('Expiry (UTC, inclusive):', min(group[0]['expiresAt'] for group in rows.values()))
+                print('\n' + output + '\n')
+                return
             user = next((u for u in accounts_at(state)[args.protocol] if u['name'] == args.name), None)
             if not user or not active(user):
                 raise ValueError('Active account not found')

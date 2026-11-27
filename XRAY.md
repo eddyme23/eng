@@ -98,6 +98,35 @@ ClientHello. Other SNI values retain the existing TLS multiplexer route.
 
 ## Accounts and Gen
 
+For one managed account covering every Xray protocol, open main menu **7**,
+then **7 — Combined Xray accounts**, then **1 — Create**. Enter one account name
+and validity. ENG creates separate VLESS/VMess UUIDs, a Trojan password and a
+Shadowsocks key together, with the same expiry, and prints all 16 connection
+links in labeled sections. The individual protocol options remain available.
+
+The combined menu provides create, renew, delete, list and export. Renewal
+preserves all credentials and updates every member's expiry together. Deletion
+removes the group's four protocol records. Individual protocol menus can export
+their links, but renewal/deletion of a combined member must use the combined
+menu to keep the account consistent. Creation refuses a name already used by
+any Xray account; it never adopts or overwrites existing individual accounts.
+Use a new name if you want to preserve an existing account with that name.
+SSH accounts and their names are separate from this Xray account store.
+
+```bash
+bash ./xray-accounts.sh create combined customer 30
+bash ./xray-accounts.sh links combined customer
+bash ./xray-accounts.sh renew combined customer 60
+bash ./xray-accounts.sh list combined
+bash ./xray-accounts.sh delete combined customer
+```
+
+Combined changes are validated and committed as one update, with one Xray
+restart. A failed validation/restart rolls back the entire change. Existing
+protocol account records, credentials and unrelated accounts are preserved.
+No additional app/Gen format changes are needed: choose the appropriate URI
+from the combined output for the profile you want to distribute.
+
 Open menu option 7, Xray Account Management. Choose VLESS, VMess, Trojan or Shadowsocks;
 create, renew, delete, list and export links are available. Numeric names are
 supported, and existing account selection uses numbered lists with 0/00 Back.

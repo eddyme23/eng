@@ -105,9 +105,8 @@ class XrayStreams(unittest.TestCase):
             settings['shadowsocks'] = dict(port=8388, serverKey=base64.b64encode(b'server-test-key!').decode())
             gateway_port, tls_port, h2_port, h1_port = port(), port(), port(), port()
             settings['reality'].update(target=f'127.0.0.1:{tls_port}', serverName='localhost')
-            users = {p: [dict(name='test', expiresAt='2099-01-01', uuid='11111111-1111-4111-8111-111111111111',
-                             password='test-password')] for p in x.PROTOCOLS}
-            users['shadowsocks'][0]['password'] = base64.b64encode(b'client-test-key!').decode()
+            # Exercise the same credential factory used by combined accounts.
+            users = {p: [x.new_account(p, 'test', '2099-01-01', 'fixture-combined')] for p in x.PROTOCOLS}
             users['shadowsocks'].append(dict(name='second', expiresAt='2099-01-01', password=base64.b64encode(b'second-test-key!').decode()))
             server = x.configuration(settings, users)
             server['log']['loglevel'] = 'debug'
@@ -155,7 +154,7 @@ class XrayStreams(unittest.TestCase):
                 for tls in ([False] if protocol == 'shadowsocks' else [True] if network == 'tcp' else x.tls_modes(protocol, network)):
                     with self.subTest(protocol=protocol, network=network, tls=tls):
                         socks = port()
-                        user = {'password': 'test-password'} if protocol == 'trojan' else {'id': users[protocol][0]['uuid']}
+                        user = {'password': users[protocol][0]['password']} if protocol == 'trojan' else {'id': users[protocol][0].get('uuid', '')}
                         stream = {'network': network, 'security': 'tls' if tls else 'none',
                                   {'ws': 'wsSettings', 'httpupgrade': 'httpupgradeSettings', 'xhttp': 'xhttpSettings', 'tcp': 'tcpSettings',
                                    'grpc': 'grpcSettings', 'ss2022': 'tcpSettings', 'ss2022-other': 'tcpSettings'}[network]:
