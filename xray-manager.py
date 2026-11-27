@@ -205,6 +205,14 @@ def metadata(state):
     atomic(state / 'backends.json', data)
 
 
+def reality_address(settings):
+    """Retire the old automatically prefixed address, including saved installs."""
+    domain = settings['domain']
+    saved = settings['reality'].get('domain', domain)
+    legacy = {'reality.' + domain, 'reality.' + settings.get('tlsDomain', domain)}
+    return domain if saved in legacy else saved
+
+
 def links(settings, protocol, user):
     if protocol == 'shadowsocks':
         ss = settings['shadowsocks']
@@ -244,7 +252,7 @@ def links(settings, protocol, user):
         r = settings['reality']
         query = dict(type='tcp', security='reality', encryption='none', flow='xtls-rprx-vision',
                      sni=r['serverName'], fp='chrome', pbk=r['publicKey'], sid=r['shortId'], spx='/')
-        yield f'vless://{user["uuid"]}@{r["domain"]}:443?{urlencode(query)}#ENG-{quote(user["name"])}-REALITY'
+        yield f'vless://{user["uuid"]}@{reality_address(settings)}:443?{urlencode(query)}#ENG-{quote(user["name"])}-REALITY'
 
 
 def display_links(settings, protocol, user):
@@ -289,6 +297,7 @@ def set_reality_address(state, value):
         raise ValueError('Specify --reality-domain with the DNS-only hostname or IPv4 to connect to')
     settings = load(state / 'xray-settings.json')
     settings['reality']['domain'] = hostname(value)
+    settings['reality']['domain'] = reality_address(settings)
     atomic(state / 'xray-settings.json', settings)
     return settings['reality']['domain']
 
@@ -462,14 +471,16 @@ def main():
             if not (state / 'xray-users.json').exists():
                 atomic(state / 'xray-users.json', {p: [] for p in PROTOCOLS})
             settings = load(state / 'xray-settings.json')
+            previous_reality_address = settings['reality'].get('domain')
             if args.reality_domain:
                 settings['reality']['domain'] = hostname(args.reality_domain)
+            settings['reality']['domain'] = reality_address(settings)
             if 'shadowsocks' not in settings:
                 if not 1024 <= args.shadowsocks_port <= 65535 or args.shadowsocks_port in (13101, 13102, 13103, 13104, 13105, 13106, 13107, 13108, 13109, 13110):
                     raise ValueError('Choose an unused TCP port from 1024 to 65535 for Shadowsocks')
                 settings['shadowsocks'] = dict(port=args.shadowsocks_port, serverKey=base64.b64encode(secrets.token_bytes(16)).decode())
                 atomic(state / 'xray-settings.json', settings)
-            elif args.reality_domain:
+            elif args.reality_domain or settings['reality']['domain'] != previous_reality_address:
                 atomic(state / 'xray-settings.json', settings)
             atomic(state / 'xray-users.json', accounts_at(state))
             render(state, args.binary)

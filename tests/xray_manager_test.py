@@ -26,6 +26,35 @@ USERS['shadowsocks'][0]['password'] = base64.b64encode(b'client-test-key!').deco
 
 
 class XrayManagerTest(unittest.TestCase):
+    def test_legacy_reality_prefix_exports_main_domain_without_changing_security(self):
+        settings = copy.deepcopy(SETTINGS)
+        settings['domain'] = settings['tlsDomain'] = 'fr.vpnguruz.store'
+        settings['reality']['domain'] = 'reality.fr.vpnguruz.store'
+        before = copy.deepcopy(settings)
+        link = next(uri for uri in x.links(settings, 'vless', USERS['vless'][0]) if 'security=reality' in uri)
+        self.assertEqual('fr.vpnguruz.store', urlparse(link).hostname)
+        query = parse_qs(urlparse(link).query)
+        self.assertEqual([settings['reality']['serverName']], query['sni'])
+        self.assertEqual([settings['reality']['publicKey']], query['pbk'])
+        self.assertEqual([settings['reality']['shortId']], query['sid'])
+        self.assertEqual(before, settings)
+
+    def test_reinstall_migrates_only_legacy_reality_address(self):
+        with tempfile.TemporaryDirectory() as folder:
+            state = Path(folder)
+            settings = copy.deepcopy(SETTINGS)
+            settings['reality']['domain'] = 'reality.' + settings['domain']
+            x.atomic(state / 'xray-settings.json', settings)
+            x.atomic(state / 'xray-users.json', USERS)
+            with patch.dict(os.environ, V6_STATE_DIR=folder), patch.object(x.os, 'geteuid', return_value=0, create=True), \
+                    patch.object(x, 'locked', return_value=contextlib.nullcontext()), patch.object(x, 'render'), \
+                    patch('sys.argv', ['xray-manager.py', 'init']):
+                x.main()
+            expected = copy.deepcopy(settings)
+            expected['reality']['domain'] = settings['domain']
+            self.assertEqual(expected, x.load(state / 'xray-settings.json'))
+            self.assertEqual(USERS, x.load(state / 'xray-users.json'))
+
     def test_all_transports_are_loopback_and_expired_users_excluded(self):
         users = copy.deepcopy(USERS)
         for rows in users.values():

@@ -84,10 +84,11 @@ address. To change that address without reinstalling or restarting services:
 bash ./xray-accounts.sh reality-address --reality-domain fr.vpnguruz.store
 ```
 
-Re-export the VLESS link afterward. Existing installations keep their previously
-selected address until explicitly changed. If an old `reality.YOUR_DOMAIN` name
-has no DNS record, set the address to an existing DNS-only hostname or create the
-missing record. In a client, edit the connection address while preserving the
+Re-export the VLESS link afterward. Old automatically prefixed
+`reality.YOUR_DOMAIN` addresses are normalized to the existing direct domain on
+export and saved on reinstall. This also applies to panel and combined-account
+exports, without restarting services. Other custom REALITY addresses are kept.
+In a client, edit the connection address while preserving the
 exported SNI, public key, short ID and Vision flow. A different address does not
 require changing those authentication settings.
 
