@@ -19,6 +19,8 @@ ROUTES = Path('/etc/frimps-v6/routes.json')
 CERTIFICATES = Path('/etc/letsencrypt/live')
 UNITS = Path('/etc/systemd/system')
 HOOKS = Path('/etc/letsencrypt/renewal-hooks/deploy')
+DATA = Path('/var/lib/frimps-panel')
+CF_CREDENTIALS = Path('/etc/letsencrypt/cloudflare.ini')
 
 
 def units():
@@ -87,6 +89,10 @@ def main():
     parser.add_argument('--port', type=int, default=None)
     parser.add_argument('--bind', choices=('0.0.0.0', '127.0.0.1'), default=None)
     parser.add_argument('--reset-password', action='store_true')
+    parser.add_argument('--central', action='store_true', help='Enable central management with administrator two-factor login')
+    parser.add_argument('--local-name', help='Display name for this VPS in the central server selector')
+    parser.add_argument('--reset-2fa', action='store_true', help='Set up a replacement administrator authenticator secret')
+    parser.add_argument('--issue-certificate', action='store_true', help='Issue a missing hostname certificate using the existing ENG Cloudflare credentials')
     args = parser.parse_args()
     if os.geteuid() != 0:
         raise SystemExit('Run as root')
@@ -103,6 +109,17 @@ def main():
     # Validate existing cert/key before changing an installed panel.
     cert = CERTIFICATES / domain / 'fullchain.pem'
     key = cert.with_name('privkey.pem')
+    if not cert.is_file() and args.issue_certificate:
+        if not CF_CREDENTIALS.is_file() or not shutil.which('certbot'):
+            raise SystemExit('Existing ENG certbot and /etc/letsencrypt/cloudflare.ini are required to issue the panel certificate')
+        call('certbot', 'certonly', '--non-interactive', '--dns-cloudflare',
+             '--dns-cloudflare-credentials', str(CF_CREDENTIALS),
+             '--dns-cloudflare-propagation-seconds', '60', '--keep-until-expiring',
+             '--cert-name', domain, '-d', domain)
+    if not cert.is_file() and not args.issue_certificate:
+        # load_cert_chain below remains the final cryptographic validation.
+        print('TLS certificate required for:', domain)
+        print('Use --issue-certificate to reuse the existing ENG Cloudflare DNS credentials.')
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(str(cert), str(key))
     if not old or port != old.get('port') or bind != old.get('bind'):
@@ -121,6 +138,21 @@ def main():
         spec.loader.exec_module(module)
         salt = secrets.token_hex(16)
         old.update(username=username, salt=salt, passwordHash=module.password_hash(password, salt))
+    central = args.central or old.get('central', False)
+    if args.reset_2fa and not central:
+        raise SystemExit('--reset-2fa applies to central management')
+    if central and (not old.get('totpSecret') or args.reset_2fa):
+        from panel_totp import new_secret, verify
+        from urllib.parse import quote
+        secret = new_secret()
+        print('Add this account to your authenticator app. Keep the setup key private.')
+        print('Account:', old['username'] + '@' + domain)
+        print('Setup key:', secret)
+        print('Authenticator URI: otpauth://totp/' + quote('ENG:' + old['username'] + '@' + domain, safe='') +
+              '?secret=' + secret + '&issuer=ENG&algorithm=SHA1&digits=6&period=30')
+        if verify(secret, getpass.getpass('Enter the current six-digit authenticator code: ').strip()) is None:
+            raise SystemExit('Authenticator code did not match; no panel configuration changed')
+        old['totpSecret'] = secret
     try:
         account = pwd.getpwnam('frimps-panel')
         if account.pw_uid == 0 or account.pw_shell not in ('/usr/sbin/nologin', '/sbin/nologin', '/bin/false'):
@@ -139,15 +171,26 @@ def main():
     STATE.mkdir(mode=0o750, parents=True, exist_ok=True)
     import grp
     gid = grp.getgrnam('frimps-panel').gr_gid
+    if central:
+        DATA.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.chown(DATA, pwd.getpwnam('frimps-panel').pw_uid, gid)
+        DATA.chmod(0o700)
     os.chown(STATE, 0, gid)
     STATE.chmod(0o750)
     old.update(domain=domain, bind=bind, port=port, origin=f'https://{domain}:{port}',
                cert='/run/credentials/frimps-panel.service/tls.crt',
                key='/run/credentials/frimps-panel.service/tls.key')
+    if central:
+        label = args.local_name or old.get('localName') or json.loads(ROUTES.read_text())['primaryDomain']
+        if not re.fullmatch(r'[\w .()-]{1,48}', label, re.UNICODE):
+            raise SystemExit('Invalid local server name')
+        old.update(central=True, dataDir=str(DATA), localName=label)
     write(STATE / 'web.json', json.dumps(old, indent=2) + '\n', 0o640)
     os.chown(STATE / 'web.json', 0, gid)
     helper, web = units()
     web = web.replace('[Service]\n', f'[Service]\nLoadCredential=tls.crt:{cert}\nLoadCredential=tls.key:{key}\n')
+    if central:
+        web = web.replace('[Service]\n', f'[Service]\nReadWritePaths={DATA}\n')
     write(UNITS / 'frimps-panel-helper.service', helper)
     write(UNITS / 'frimps-panel.service', web)
     # Certificate renewal refreshes systemd credentials without touching VPNs.
@@ -159,7 +202,13 @@ def main():
     call('systemctl', 'restart', 'frimps-panel-helper.service', 'frimps-panel.service')
     call('systemctl', 'is-active', '--quiet', 'frimps-panel-helper.service', 'frimps-panel.service')
     print(f'ENG panel: https://{domain}:{port}')
-    print(f'Allow inbound TCP {port} only from your administrator IP where possible. Use a DNS-only hostname.')
+    if central:
+        print('Central management enabled. Sign in with your administrator password and authenticator code.')
+        print('This VPS is available locally. Add other servers using one-time pairing codes in the panel.')
+    if central:
+        print(f'Allow inbound TCP {port} from your administrator and remote VPS IP addresses. Use a DNS-only hostname.')
+    else:
+        print(f'Allow inbound TCP {port} only from your administrator IP where possible. Use a DNS-only hostname.')
     print('VPN services, account stores, DNS keys and routing were not changed.')
 
 

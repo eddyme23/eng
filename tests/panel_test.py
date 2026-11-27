@@ -185,6 +185,31 @@ class InstallTests(unittest.TestCase):
             self.assertNotEqual(config['passwordHash'], reset['passwordHash'])
             self.assertEqual(web.password_hash('abc', reset['salt']), reset['passwordHash'])
             self.assertEqual(config['origin'], reset['origin'])
+            data = base / 'central-data'
+            credentials = base / 'cloudflare.ini'
+            credentials.write_text('dns_cloudflare_api_token = test-only-token')
+            stack.enter_context(patch.object(installer, 'DATA', data))
+            stack.enter_context(patch.object(installer, 'CF_CREDENTIALS', credentials))
+            import panel_totp
+            secret = panel_totp.new_secret()
+            otp = panel_totp.code(secret, int(time.time()//30))
+            with patch('sys.argv', ['panel-install.py','--central','--domain','panel.example.com','--local-name','France','--issue-certificate']), patch.object(panel_totp,'new_secret',return_value=secret), patch.object(installer.getpass,'getpass',return_value=otp), patch.object(installer.shutil,'which',return_value='/usr/bin/certbot'):
+                installer.main()
+            central = json.loads((installer.STATE / 'web.json').read_text())
+            self.assertTrue(central['central'])
+            self.assertEqual(secret, central['totpSecret'])
+            self.assertEqual(reset['passwordHash'], central['passwordHash'])
+            self.assertEqual('https://panel.example.com:8445', central['origin'])
+            self.assertEqual('France', central['localName'])
+            self.assertEqual(before, routes.read_bytes())
+            self.assertIn('ReadWritePaths='+str(data), (installer.UNITS/'frimps-panel.service').read_text())
+            cert_calls = [call.args for call in calls.call_args_list if call.args[0]=='certbot']
+            self.assertEqual(1,len(cert_calls))
+            self.assertIn(str(credentials),cert_calls[0])
+            self.assertNotIn('test-only-token',' '.join(cert_calls[0]))
+            with patch('builtins.input', side_effect=AssertionError('central update must not prompt')), patch.object(installer.getpass,'getpass',side_effect=AssertionError('authenticator must be preserved')):
+                installer.main()
+            self.assertEqual(central,json.loads((installer.STATE/'web.json').read_text()))
 
 
 class HTTPTests(unittest.TestCase):

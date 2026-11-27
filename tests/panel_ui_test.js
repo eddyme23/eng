@@ -6,14 +6,17 @@ const vm = require('node:vm');
 const path = require('node:path');
 const ids = ['login','workspace','logout','protocol','auth','auth-field','action',
   'account-help','name-field','name','days-field','days','password-field','password',
-  'run','download','copy','clear','output','message','admin','secret','accounts','status'];
+  'run','download','copy','clear','output','message','admin','secret','accounts','status',
+  'server','target-name','refresh-servers','revoke-server','pairing','pair-server','server-name','otp','otp-field','central-controls','scope-label','page-title','page-description'];
 const nodes = Object.fromEntries(ids.map(id=>[id,{value:'',hidden:false,disabled:false,textContent:''}]));
 nodes.protocol.value='ssh'; nodes.auth.value='ssh'; nodes.action.value='list'; nodes.days.value='30';
+nodes.server.value='local';nodes.server.options=[{value:'local',textContent:'This VPS'}];
+nodes.server.replaceChildren=(...options)=>{nodes.server.options=options;};
 nodes.action.options=['list','create','renew','delete','export','share'].map(value=>({value}));
 const calls=[]; let clipboard='';
 const context=vm.createContext({document:{getElementById:id=>nodes[id]}, confirm:()=>true,
-  fetch:async(url, options)=>{if(options)calls.push({url,data:JSON.parse(options.body)});return {ok:true,status:200,json:async()=>({csrf:'token',output:'test output'})};},
-  URL,Blob,setTimeout,console,navigator:{clipboard:{writeText:async text=>{clipboard=text;}}}});
+  fetch:async(url, options)=>{if(options && options.body)calls.push({url,data:JSON.parse(options.body)});return {ok:true,status:200,json:async()=>({csrf:'token',output:'test output'})};},
+  URL,Blob,setTimeout,console,Option:class{constructor(text,value){this.textContent=text;this.value=value;}},navigator:{clipboard:{writeText:async text=>{clipboard=text;}}}});
 vm.runInContext(fs.readFileSync(path.join(__dirname,'../panel.js'),'utf8'),context);
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 async function main(){
@@ -55,6 +58,34 @@ async function main(){
   nodes.accounts.onsubmit({preventDefault(){}});await tick();
   assert.equal(calls.at(-1).data.protocol,'openvpn');
   assert.equal(calls.at(-1).data.password,'openvpnpass');
+  const remote='b'.repeat(32);let registered=true;
+  vm.runInContext("centralMode=true;centralUrl='https://panel.example:8445'",context);
+  context.fetch=async(url,options)=>{
+    if(options && options.body)calls.push({url,data:JSON.parse(options.body)});
+    if(url==='/api/revoke-server')registered=false;
+    const result=url==='/api/servers'?{servers:[{id:'local',label:'France',local:true,ready:true},...(registered?[{id:remote,label:'USA',ready:true}]:[])]}:
+      url==='/api/pairing-code'?{label:'Germany',code:'one-use-code'}:{ok:true,output:'REMOTE RESULT'};
+    return {ok:true,status:200,json:async()=>result};
+  };
+  await context.refreshServers();
+  nodes.server.value=remote;nodes.server.onchange();
+  assert.match(nodes['target-name'].textContent,/USA/);
+  nodes.password.value='remote-password';
+  nodes.accounts.onsubmit({preventDefault(){}});await tick();
+  assert.equal(calls.at(-1).data.server,remote);
+  assert.equal(calls.at(-1).data.protocol,'openvpn');
+  nodes['server-name'].value='Germany';
+  await nodes.pairing.onsubmit({preventDefault(){}});
+  assert.equal(calls.at(-1).url,'/api/pairing-code');
+  assert.match(nodes.output.textContent,/one-use-code/);
+  await nodes['revoke-server'].onclick();
+  assert.equal(calls.at(-1).url,'/api/revoke-server');
+  assert.equal(calls.at(-1).data.server,remote);
+  assert.equal(nodes.server.value,'');
+  const before=calls.length;
+  await context.operate({action:'status'});
+  assert.equal(calls.length,before); // Removed selection must never fall back to A.
+  nodes.server.value='local';nodes.server.onchange();
   let finishRequest;
   context.fetch=async(url)=>{
     if(url==='/api/action')return new Promise(resolve=>{finishRequest=()=>resolve({ok:true,status:200,json:async()=>({output:'private result'})});});

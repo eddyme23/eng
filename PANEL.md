@@ -1,8 +1,12 @@
 # Optional ENG administration panel
 
-The panel is optional, one administrator and one VPS per installation. It reuses
+The panel is optional, with one administrator per installation. It reuses
 the terminal account managers and their existing locks, expiry and rendering.
 It does not install another VPN manager or replace the gateways on 80/443.
+
+Optional multi-VPS management is available through the [central panel setup](CENTRAL-PANEL.md).
+Standalone installation below still manages only its own VPS. Central mode adds
+an explicit server selector, outbound agents and required authenticator login.
 
 The responsive interface has sidebar navigation, grouped account forms and a
 separate results area with copy, download and clear controls. On phones the
@@ -75,7 +79,7 @@ rename OpenVPN/WireGuard profiles to `.ovpn`/`.conf` as required by the client.
 The dashboard shows installed service/boot state. Missing protocol installations
 produce an error from their existing manager, not an automatic installation.
 No traffic quotas, billing, reseller accounts, online-user estimates, QR codes,
-browser shell, service restart, backup/restore or central multi-VPS management are
+browser shell, service restart or backup/restore are
 included in this first version. Logs and advanced controls remain in the CLI.
 
 ## Security and maintenance
@@ -93,7 +97,9 @@ Cookies are Secure/HttpOnly/SameSite=Strict. Origin/Host and CSRF tokens are che
 login attempts and concurrent HTTP workers are bounded. Secrets are not stored
 in browser local storage or logged in HTTP access logs. Output and downloads may
 contain private keys/passwords: keep them private and sign out when finished.
-Only metadata (operation and protocol) is logged by the helper. No MFA yet.
+Only metadata (operation and protocol) is logged by the helper. Central mode
+requires authenticator-based two-factor login; standalone mode keeps its
+existing password login.
 
 systemd loads the TLS certificate/key as service credentials, without opening up
 the original key's permissions. A certbot deploy hook restarts only the panel
@@ -125,3 +131,5 @@ renewal, actual account changes and phone browsing/reconnects need a staging VPS
 before production rollout. Existing protocol-manager tests cover their own logic.
 Run `node tests/panel_ui_test.js` to check SSH password/certificate selection,
 request routing, credential clearing and operation-specific form fields.
+Run `python3 -m unittest discover -s tests -p panel_central_test.py` for central
+pairing, isolation, revocation, agent replay protection and real HTTPS exchange.

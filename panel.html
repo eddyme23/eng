@@ -6,20 +6,25 @@
   <a class="brand" href="/" aria-label="ENG home"><span class="brand-mark">E</span><span>ENG<span class="brand-caption">SERVER MANAGER</span></span></a>
   <div class="sidebar-section">WORKSPACE</div>
   <nav><a href="#accounts" class="nav-link"><span aria-hidden="true">▤</span><span class="nav-label">Account management</span></a><a href="#results" class="nav-link"><span aria-hidden="true">≡</span><span class="nav-label">Results &amp; exports</span></a></nav>
-  <div class="sidebar-note"><span class="eyebrow">ONE VPS. ONE WORKSPACE.</span><p>Manage your ENG accounts in one place.</p><span class="outline-tag">Administrator panel</span></div>
+  <div class="sidebar-note"><span class="eyebrow" id="scope-label">ONE VPS. ONE WORKSPACE.</span><p>Manage your ENG accounts in one place.</p><span class="outline-tag">Administrator panel</span></div>
   <div class="sidebar-footer">ENG administration<span>Private access · HTTPS</span></div>
 </aside>
 <main id="main">
   <header class="topbar"><span class="breadcrumb">Workspace <span>/</span> Server management</span><button id="logout" class="button secondary small" hidden>Sign out</button></header>
-  <div class="page-heading"><div><span class="eyebrow accent">ENG CONTROL PANEL</span><h1>Your server, organized.</h1><p>Accounts, connection details and service status.</p></div><span class="outline-tag security-tag">HTTPS access</span></div>
+  <div class="page-heading"><div><span class="eyebrow accent">ENG CONTROL PANEL</span><h1 id="page-title">Your server, organized.</h1><p id="page-description">Accounts, connection details and service status.</p></div><span class="outline-tag security-tag">HTTPS access</span></div>
   <form id="login" class="card login-card">
     <div class="card-heading"><span class="section-number">01</span><div><h2>Welcome back</h2><p>Sign in to manage this VPS.</p></div></div>
     <label>Administrator name<input id="admin" autocomplete="username" placeholder="Your administrator name" required></label>
     <label>Password<input id="secret" type="password" autocomplete="current-password" placeholder="Enter your password" required></label>
+    <label id="otp-field" hidden>Authenticator code<input id="otp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="Six-digit code" disabled></label>
     <button class="button primary">Sign in to workspace <span aria-hidden="true">→</span></button>
     <p class="fine-print">Use your panel login, separate from your VPN accounts.</p>
   </form>
   <section id="workspace" hidden>
+    <section id="central-controls" class="card central-controls" hidden aria-label="Central server management">
+      <div class="server-toolbar"><label>Target VPS<select id="server"><option value="local">This VPS</option></select></label><button id="refresh-servers" class="button secondary">Refresh servers</button><button id="revoke-server" class="button ghost" disabled>Remove server access</button></div>
+      <details><summary>Add another VPS</summary><form id="pairing"><label>Server name<input id="server-name" maxlength="48" placeholder="e.g. Germany" required></label><button id="pair-server" class="button secondary">Generate pairing code</button></form><p class="fine-print">A code expires after 15 minutes and works once. Run panel-agent-install.sh on the target VPS and enter it there. This does not copy VPN accounts.</p></details>
+    </section>
     <div class="workspace-strip"><div><span class="strip-icon" aria-hidden="true">↔</span><span><strong>Connected to your ENG account tools</strong><small>The panel and terminal menu manage the same accounts.</small></span></div><button id="status" class="button secondary">Check service status <span aria-hidden="true">↗</span></button></div>
     <div class="management-grid">
       <section class="card account-card" aria-labelledby="account-title">
@@ -31,7 +36,7 @@
         <label>Operation<select id="action"><option value="list">List accounts</option><option value="create">Create account</option><option value="renew">Renew account</option><option value="delete">Delete account and its identities</option><option value="export">Export credentials / profile</option><option value="share">Export public certificate authorization</option></select></label>
         <div class="form-grid"><label id="name-field">Account name<input id="name" maxlength="32" pattern="[a-z0-9_][a-z0-9_-]{0,31}" autocomplete="off" placeholder="e.g. eddy"></label><label id="days-field">Validity (days)<input id="days" type="number" min="1" max="3650" value="30" required></label></div>
         <label id="password-field">Password<input id="password" type="password" autocomplete="new-password" maxlength="128" placeholder="Set the account password"></label>
-        <div class="form-footer"><span>Applies to this VPS</span><button id="run" class="button primary">Run operation <span aria-hidden="true">→</span></button></div></form>
+        <div class="form-footer"><span>Target: <strong id="target-name">This VPS</strong></span><button id="run" class="button primary">Run operation <span aria-hidden="true">→</span></button></div></form>
       </section>
       <aside class="guide-card" aria-label="Account guidance"><span class="eyebrow">QUICK GUIDE</span><h3>A clearer way to manage access.</h3>
         <div class="guide-item"><span>01</span><div><h4>Choose your account</h4><p>SSH protocols share one section. Select password or app certificate authentication.</p></div></div>
