@@ -24,6 +24,11 @@ are separate from existing WebSocket/XHTTP/OpenVPN paths. No gRPC NTLS links
 are exported. XHTTP remains the preferred newer HTTP transport; gRPC is an
 additional compatibility option.
 
+gRPC TLS exports use the TLS hostname as authority as well as SNI. VLESS and
+Trojan links carry `authority=DOMAIN`; VMess JSON uses its standard `host` field,
+which compatible clients map to gRPC authority. Re-export and re-import older
+profiles to populate an authority that was previously missing.
+
 Shadowsocks uses `2022-blake3-aes-128-gcm`, a persistent server key and a separate
 random key per account. Its `ss://` link includes both keys in the standard
 `ServerKey:UserKey` password format. TCP 8388 must be allowed in provider/host

@@ -239,7 +239,7 @@ def links(settings, protocol, user):
                 if network == 'grpc':
                     query.pop('host')
                     query.pop('path')
-                    query.update(serviceName=path.lstrip('/'), mode='gun')
+                    query.update(serviceName=path.lstrip('/'), mode='gun', authority=host)
                 if protocol == 'vless':
                     query['encryption'] = 'none'
                 if tls:

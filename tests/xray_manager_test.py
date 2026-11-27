@@ -159,14 +159,31 @@ class XrayManagerTest(unittest.TestCase):
             if protocol == 'vmess':
                 data = next(d for d in [json.loads(base64.b64decode(link[8:])) for link in output] if d['net'] == 'grpc')
                 self.assertEqual((data['port'], data['tls'], data['path'], data['alpn']), ('443', 'tls', 'vmess-grpc', 'h2'))
+                self.assertEqual(SETTINGS['domain'], data['host'])  # VMess JSON maps host to gRPC authority.
             else:
                 parsed = [(urlparse(link), parse_qs(urlparse(link).query)) for link in output]
                 uri, query = next((uri, query) for uri, query in parsed if query.get('type') == ['grpc'])
                 self.assertEqual(uri.port, 443)
                 self.assertEqual(query['serviceName'], [protocol + '-grpc'])
                 self.assertEqual(query['alpn'], ['h2'])
+                self.assertEqual(query['authority'], [SETTINGS['domain']])
                 self.assertNotIn('path', query)
                 self.assertNotIn('host', query)
+
+    def test_grpc_authority_uses_tls_domain_instead_of_ntls_alias(self):
+        settings = dict(SETTINGS, tlsDomain='tls.example.test')
+        for protocol in ('vless', 'vmess', 'trojan'):
+            output = list(x.links(settings, protocol, USERS[protocol][0]))
+            if protocol == 'vmess':
+                data = next(d for d in (json.loads(base64.b64decode(link[8:])) for link in output) if d['net'] == 'grpc')
+                self.assertEqual(data['host'], 'tls.example.test')
+                self.assertEqual(data['sni'], 'tls.example.test')
+            else:
+                uri = next(urlparse(link) for link in output if 'type=grpc' in link)
+                query = parse_qs(uri.query)
+                self.assertEqual(query['authority'], ['tls.example.test'])
+                self.assertEqual(query['sni'], ['tls.example.test'])
+                self.assertEqual(uri.hostname, 'tls.example.test')
 
     def test_shadowsocks_link_and_empty_account_set_cannot_fall_back_to_server_key(self):
         link, = x.links(SETTINGS, 'shadowsocks', USERS['shadowsocks'][0])
