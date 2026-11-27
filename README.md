@@ -19,8 +19,6 @@ bash ./install-frimps.sh
 
 ## Protocols and ports
 
-Xray installation, account management and live-server update instructions: [XRAY.md](XRAY.md).
-
 | Service | Public ports / path |
 |---|---|
 | OpenSSH | 22 |
